@@ -10,15 +10,29 @@ interface LogEntry {
   ms?: number;
 }
 
+interface AgentSettings {
+  visionEnabled: boolean;
+  blurFaces: boolean;
+  nerEnabled: boolean;
+}
+
+interface LastStats {
+  elements: number;
+  redactions: number;
+  facesBlurred: number;
+  screenshotKb: number;
+}
+
 interface Snapshot {
   socketStatus: string;
   socketDetail: string;
   serverUrl: string;
   taskRunning: boolean;
   currentTask: string;
+  settings: AgentSettings;
   logs: LogEntry[];
   lastPlan: PlanMsg | null;
-  lastStats: { elements: number; redactions: number } | null;
+  lastStats: LastStats | null;
 }
 
 const LEVEL_STYLE: Record<LogEntry["level"], string> = {
@@ -80,7 +94,9 @@ export default function App() {
       } else if (msg.kind === "plan") {
         setSnap((prev) => (prev ? { ...prev, lastPlan: msg.plan as PlanMsg } : prev));
       } else if (msg.kind === "stats") {
-        setSnap((prev) => (prev ? { ...prev, lastStats: msg.stats } : prev));
+        setSnap((prev) => (prev ? { ...prev, lastStats: msg.stats as LastStats } : prev));
+      } else if (msg.kind === "settings") {
+        setSnap((prev) => (prev ? { ...prev, settings: msg.settings as AgentSettings } : prev));
       } else if (msg.kind === "task") {
         setSnap((prev) =>
           prev ? { ...prev, taskRunning: msg.running, currentTask: msg.task } : prev
@@ -108,6 +124,41 @@ export default function App() {
     await browser.runtime.sendMessage({ type: "SET_SERVER_URL", url: serverUrl });
     setEditingUrl(false);
   };
+  const setSetting = (key: string, value: boolean) =>
+    browser.runtime.sendMessage({ type: "SET_SETTING", key, value });
+
+  const Toggle = ({
+    label,
+    hint,
+    k,
+    checked,
+  }: {
+    label: string;
+    hint?: string;
+    k: string;
+    checked?: boolean;
+  }) => (
+    <button
+      onClick={() => setSetting(k, !checked)}
+      className="flex w-full items-center justify-between rounded-lg bg-slate-900 px-2.5 py-1.5 text-left hover:bg-slate-800/70"
+    >
+      <span>
+        <span className="block text-[11px] font-medium text-slate-200">{label}</span>
+        {hint && <span className="block text-[9px] leading-tight text-slate-500">{hint}</span>}
+      </span>
+      <span
+        className={`relative h-4 w-7 shrink-0 rounded-full transition ${
+          checked ? "bg-indigo-500" : "bg-slate-700"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all ${
+            checked ? "left-3.5" : "left-0.5"
+          }`}
+        />
+      </span>
+    </button>
+  );
 
   return (
     <div className="flex flex-col gap-3 bg-slate-950 p-3 text-slate-200">
@@ -155,23 +206,49 @@ export default function App() {
       )}
 
       {snap?.lastStats && (
-        <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="grid grid-cols-4 gap-1.5 text-center">
           <div className="rounded-lg bg-slate-900 py-2">
-            <p className="text-lg font-semibold leading-none">{snap.lastStats.elements}</p>
-            <p className="mt-1 text-[9px] uppercase tracking-wide text-slate-500">elements read</p>
+            <p className="text-base font-semibold leading-none">{snap.lastStats.elements}</p>
+            <p className="mt-1 text-[8px] uppercase tracking-wide text-slate-500">elements</p>
           </div>
           <div className="rounded-lg bg-indigo-950/60 py-2 ring-1 ring-indigo-800/50">
-            <p className="text-lg font-semibold leading-none text-indigo-300">
+            <p className="text-base font-semibold leading-none text-indigo-300">
               {snap.lastStats.redactions}
             </p>
-            <p className="mt-1 text-[9px] uppercase tracking-wide text-indigo-400/70">PII masked</p>
+            <p className="mt-1 text-[8px] uppercase tracking-wide text-indigo-400/70">PII masked</p>
+          </div>
+          <div className="rounded-lg bg-emerald-950/40 py-2 ring-1 ring-emerald-900/50">
+            <p className="text-base font-semibold leading-none text-emerald-300">
+              {snap.lastStats.facesBlurred}
+            </p>
+            <p className="mt-1 text-[8px] uppercase tracking-wide text-emerald-400/70">faces</p>
           </div>
           <div className="rounded-lg bg-slate-900 py-2">
-            <p className="text-lg font-semibold leading-none">{snap.logs.filter((l) => l.stage === "plan").length}</p>
-            <p className="mt-1 text-[9px] uppercase tracking-wide text-slate-500">plans</p>
+            <p className="text-base font-semibold leading-none">{snap.lastStats.screenshotKb ?? "—"}</p>
+            <p className="mt-1 text-[8px] uppercase tracking-wide text-slate-500">KB sent</p>
           </div>
         </div>
       )}
+
+      <div className="flex flex-col gap-1">
+        <Toggle
+          label="Sanitized screenshot"
+          hint="PII boxes + face blur applied on-device before send"
+          k="visionEnabled"
+          checked={snap?.settings.visionEnabled}
+        />
+        <Toggle
+          label="Blur faces (vs blackout)"
+          k="blurFaces"
+          checked={snap?.settings.blurFaces}
+        />
+        <Toggle
+          label="AI name detection"
+          hint="masks person names in text values on-device"
+          k="nerEnabled"
+          checked={snap?.settings.nerEnabled}
+        />
+      </div>
 
       <textarea
         value={task}

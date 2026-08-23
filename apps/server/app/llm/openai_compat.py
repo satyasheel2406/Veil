@@ -12,6 +12,9 @@ The client browser sends you an ANONYMIZED description of the current web page:
 - `elements`: interactive/semantic elements, each with a stable numeric `id`, its `role`,
   accessible `name`, and `value` (sensitive values are replaced by placeholder refs like [EMAIL_1]).
 - `pii_refs`: the set of placeholder refs available for this screen (kind + ref). Values never leave the user's machine.
+- Optionally an image of the page. The client has ALREADY redacted it locally: sensitive regions
+  are covered by black boxes and faces are blurred. Treat boxed/blurred areas as unknowns —
+  never guess or reconstruct their content.
 
 Your job: decide the next best sequence of actions to accomplish the user's task.
 
@@ -50,6 +53,19 @@ class OpenAICompatProvider:
         self.timeout_s = timeout_s
 
     async def plan(self, task: str, screen: ScreenContext) -> PlanResult:
+        screen_json = json.dumps(
+            {"task": task, "screen": screen.model_dump(mode="json", exclude={"image_regions"})},
+            separators=(",", ":"),
+        )
+        content: list[dict[str, Any]] = [{"type": "text", "text": screen_json}]
+        for region in screen.image_regions[:4]:
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{region.mime};base64,{region.data_b64}"},
+                }
+            )
+
         payload: dict[str, Any] = {
             "model": self.model,
             "temperature": 0.0,
@@ -57,13 +73,7 @@ class OpenAICompatProvider:
             "response_format": {"type": "json_object"},
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {"task": task, "screen": screen.model_dump(mode="json")},
-                        separators=(",", ":"),
-                    ),
-                },
+                {"role": "user", "content": content},
             ],
         }
         headers = {"Authorization": f"Bearer {self.api_key}"}

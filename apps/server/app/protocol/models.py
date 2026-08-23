@@ -137,6 +137,8 @@ class Timings(BaseModel):
     extract_ms: float = 0
     redact_ms: float = 0
     serialize_ms: float = 0
+    capture_ms: float = 0
+    vision_ms: float = 0
     rtt_ms: Optional[float] = None
 
 

@@ -48,20 +48,29 @@ interface Pattern {
 }
 
 const PATTERNS: Pattern[] = [
-  { kind: "api_key", re: /\b(?:sk|gsk|pk_live|pk_test|api)[-_][A-Za-z0-9]{16,}\b/g },
+  {
+    kind: "api_key",
+    re: /\b(?:sk|gsk|pk_live|pk_test|api|AIza)[-_][A-Za-z0-9_-]{15,}/g,
+  },
   { kind: "email", re: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g },
   {
     kind: "card",
     re: /\b(?:\d[ -]?){12,18}\d\b/g,
-    verify: (m) => luhnValid(m[0].replace(/[ -]/g, "")),
+    verify: (m) => luhnValid(m.replace(/[ -]/g, "")),
   },
   { kind: "iban", re: /\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b/g },
   { kind: "ssn", re: /\b\d{3}-\d{2}-\d{4}\b/g },
   { kind: "aadhaar", re: /\b\d{4}[ -]\d{4}[ -]\d{4}\b/g },
   {
     kind: "phone",
-    re: /(?:\+?\d{1,3}[\s.-]?)?(?:\(\d{1,4}\)[\s.-]?)?\d{3}[\s.-]?\d{3}[\s.-]?\d{3,4}/g,
-    verify: (m) => (m[0].match(/\d/g) ?? []).length >= 10,
+    re: /(?<![\w])(?:[+(]?\d[\d\s().-]{6,17}\d)(?![\w])/g,
+    verify: (m) => {
+      const digits = (m.match(/\d/g) ?? []).length;
+      if (digits < 10 || digits > 13) return false;
+      const groups = m.split(/[^\d]+/).filter(Boolean);
+      if (groups.length === 4 && groups.every((g) => g.length <= 3)) return false;
+      return true;
+    },
   },
 ];
 

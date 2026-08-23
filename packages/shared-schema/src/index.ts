@@ -107,6 +107,8 @@ export const Timings = z.object({
   extract_ms: z.number().nonnegative(),
   redact_ms: z.number().nonnegative(),
   serialize_ms: z.number().nonnegative(),
+  capture_ms: z.number().nonnegative().default(0),
+  vision_ms: z.number().nonnegative().default(0),
   rtt_ms: z.number().nullable().default(null),
 });
 export type Timings = z.infer<typeof Timings>;

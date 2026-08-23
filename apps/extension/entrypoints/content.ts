@@ -21,7 +21,13 @@ export default defineContentScript({
             const out = extractAndRedact();
             nodes = out.nodes;
             map = out.map;
-            return { ok: true, screen: out.screen, timings: out.timings };
+            return {
+              ok: true,
+              screen: out.screen,
+              timings: out.timings,
+              sensitiveRects: out.sensitiveRects,
+              dpr: window.devicePixelRatio || 1,
+            };
           } catch (e) {
             return { ok: false, error: e instanceof Error ? e.message : String(e) };
           }

@@ -11,6 +11,8 @@
     "dev:ext": "npm run dev --workspace @pv/extension",
     "build:ext": "npm run build --workspace @pv/extension",
     "zip:ext": "npm run zip --workspace @pv/extension",
+    "test:ext": "npm run test --workspace @pv/extension",
+    "test": "npm run test:ext && npm run test:server",
     "typecheck": "npm run typecheck --workspace @pv/schema && npm run typecheck --workspace @pv/extension",
     "server:install": "python -m venv apps/server/.venv && apps/server/.venv/Scripts/python -m pip install -r apps/server/requirements.txt",
     "server:dev": "apps/server/.venv/Scripts/python -m uvicorn app.main:app --reload --port 8765",

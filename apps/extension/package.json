@@ -8,7 +8,9 @@
     "build": "wxt build",
     "zip": "wxt zip",
     "compile": "tsc --noEmit",
-    "typecheck": "wxt prepare && tsc --noEmit"
+    "typecheck": "wxt prepare && tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.35",

@@ -5,6 +5,7 @@ export interface ExtractOutput {
   screen: ScreenContext;
   nodes: Map<number, HTMLElement>;
   map: PlaceholderMap;
+  sensitiveRects: Array<{ x: number; y: number; w: number; h: number }>;
   timings: { extract_ms: number; redact_ms: number; serialize_ms: number };
 }
 
@@ -36,16 +37,20 @@ const MAX_TEXT = 200;
 
 class RedactTimer {
   ms = 0;
+  lastHits = 0;
   constructor(private map: PlaceholderMap) {}
   scan(text: string): string {
     const t0 = performance.now();
     try {
-      return scanText(text, this.map).text;
+      const r = scanText(text, this.map);
+      this.lastHits = r.hits;
+      return r.text;
     } finally {
       this.ms += performance.now() - t0;
     }
   }
   register(value: string, kind: PiiKind): string {
+    this.lastHits = 1;
     return this.map.register(value, kind);
   }
 }
@@ -214,6 +219,7 @@ export function extractAndRedact(): ExtractOutput {
   const rt = new RedactTimer(map);
   const nodes = new Map<number, HTMLElement>();
   const elements: ElementNode[] = [];
+  const sensitiveRects: ExtractOutput["sensitiveRects"] = [];
 
   const candidates = Array.from(document.body.querySelectorAll<HTMLElement>(SELECTOR));
 
@@ -228,9 +234,15 @@ export function extractAndRedact(): ExtractOutput {
 
     const role = roleOf(el);
     const rawName = accessibleName(el);
-    const name = rawName ? rt.scan(rawName) || null : null;
+    const nameBefore = rawName ? rt.scan(rawName) : "";
+    rt.lastHits = 0;
+    const name = rawName ? nameBefore || null : null;
 
     const vs = valueSlotFor(el, role, rt);
+    const elementSensitive =
+      vs?.kind === "redacted" ||
+      rt.lastHits > 0 ||
+      (el instanceof HTMLInputElement && el.type === "password");
 
     const isEditable =
       el instanceof HTMLTextAreaElement ||
@@ -238,6 +250,15 @@ export function extractAndRedact(): ExtractOutput {
       (el as HTMLElement).isContentEditable ||
       (el instanceof HTMLInputElement &&
         !["button", "submit", "reset", "file", "hidden", "checkbox", "radio"].includes(el.type));
+
+    if (elementSensitive) {
+      sensitiveRects.push({
+        x: Math.round(rect.left),
+        y: Math.round(rect.top),
+        w: Math.round(rect.width),
+        h: Math.round(rect.height),
+      });
+    }
 
     elements.push({
       id,
@@ -281,6 +302,7 @@ export function extractAndRedact(): ExtractOutput {
     screen,
     nodes,
     map,
+    sensitiveRects,
     timings: {
       extract_ms: r1(serializeStart - t0 - rt.ms),
       redact_ms: r1(rt.ms),
