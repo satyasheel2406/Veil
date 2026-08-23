@@ -4,6 +4,7 @@ import type { AgentAction, PlanMsg, ScreenContext, Timings } from "@pv/schema";
 import { AgentSocket, DEFAULT_SERVER_URL, type SocketStatus } from "@/lib/ws-client";
 import { redactScreenshot, type SensitiveRect } from "@/lib/vision/screenshot";
 import { nerEnrichScreen } from "@/lib/privacy/ner";
+import { sanitizeScreen } from "@/lib/security/injection-guard";
 
 interface RuntimePort {
   postMessage(msg: unknown): void;
@@ -18,6 +19,13 @@ interface LogEntry {
   ms?: number;
 }
 
+interface LastStats {
+  elements: number;
+  redactions: number;
+  facesBlurred: number;
+  screenshotKb: number;
+}
+
 interface PopupSnapshot {
   socketStatus: SocketStatus;
   socketDetail: string;
@@ -28,6 +36,7 @@ interface PopupSnapshot {
   logs: LogEntry[];
   lastPlan: PlanMsg | null;
   lastStats: LastStats | null;
+  lastTimings: Timings | null;
 }
 
 interface AgentSettings {
@@ -57,6 +66,7 @@ let taskRunning = false;
 let currentTask = "";
 let lastPlan: PlanMsg | null = null;
 let lastStats: LastStats | null = null;
+let lastTimings: Timings | null = null;
 let settings: AgentSettings = { ...DEFAULT_SETTINGS };
 const logRing: LogEntry[] = [];
 const popupPorts = new Set<RuntimePort>();
@@ -100,6 +110,7 @@ function snapshot(): PopupSnapshot {
     logs: logRing.slice(-80),
     lastPlan,
     lastStats,
+    lastTimings,
   };
 }
 
@@ -270,6 +281,16 @@ async function runTask(task: string): Promise<void> {
 
       let screen: ScreenContext = resp.screen!;
 
+      const guard = sanitizeScreen(screen);
+      screen = guard.screen;
+      if (guard.hits > 0) {
+        log(
+          "warn",
+          "guard",
+          `${guard.hits} prompt-injection pattern(s) neutralized in page content (elements ${guard.flaggedIds.join(", ")})`
+        );
+      }
+
       log(
         "success",
         "redact",
@@ -322,6 +343,9 @@ async function runTask(task: string): Promise<void> {
       if (answer.type !== "plan") throw new Error("unexpected server frame");
 
       const rtt = performance.now() - planStart;
+      timings.rtt_ms = round1(rtt);
+      lastTimings = { ...timings };
+      broadcast({ kind: "timings", timings: lastTimings });
       lastPlan = answer;
       broadcast({ kind: "plan", plan: answer });
       log("info", "plan", answer.thought || "(no thought)", Math.max(0.1, round1(rtt - (answer.usage_ms ?? 0))));

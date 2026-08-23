@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from .core.config import settings
+from .core.stats import stats
 from .gateway.ws import router as ws_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -20,6 +21,10 @@ def create_app() -> FastAPI:
     @app.get("/health")
     async def health() -> dict:
         return {"ok": True, "provider": settings.llm_provider}
+
+    @app.get("/stats")
+    async def stats_endpoint() -> dict:
+        return {"ok": True, **stats.summary()}
 
     if DEMO_DIR.exists():
         app.mount("/demo", StaticFiles(directory=str(DEMO_DIR), html=True), name="demo")

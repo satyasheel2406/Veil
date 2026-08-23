@@ -23,6 +23,29 @@ interface LastStats {
   screenshotKb: number;
 }
 
+interface TimingsView {
+  extract_ms: number;
+  redact_ms: number;
+  serialize_ms: number;
+  capture_ms: number;
+  vision_ms: number;
+  rtt_ms: number | null;
+}
+
+const BUDGETS: Array<{ key: keyof TimingsView; label: string; budget: number }> = [
+  { key: "extract_ms", label: "extract", budget: 150 },
+  { key: "redact_ms", label: "redact", budget: 50 },
+  { key: "vision_ms", label: "vision", budget: 400 },
+  { key: "capture_ms", label: "capture", budget: 150 },
+  { key: "rtt_ms", label: "server rtt", budget: 2500 },
+];
+
+function barTone(ratio: number): string {
+  if (ratio > 1) return "bg-rose-500";
+  if (ratio > 0.6) return "bg-amber-400";
+  return "bg-emerald-500";
+}
+
 interface Snapshot {
   socketStatus: string;
   socketDetail: string;
@@ -33,6 +56,7 @@ interface Snapshot {
   logs: LogEntry[];
   lastPlan: PlanMsg | null;
   lastStats: LastStats | null;
+  lastTimings: TimingsView | null;
 }
 
 const LEVEL_STYLE: Record<LogEntry["level"], string> = {
@@ -95,6 +119,8 @@ export default function App() {
         setSnap((prev) => (prev ? { ...prev, lastPlan: msg.plan as PlanMsg } : prev));
       } else if (msg.kind === "stats") {
         setSnap((prev) => (prev ? { ...prev, lastStats: msg.stats as LastStats } : prev));
+      } else if (msg.kind === "timings") {
+        setSnap((prev) => (prev ? { ...prev, lastTimings: msg.timings as TimingsView } : prev));
       } else if (msg.kind === "settings") {
         setSnap((prev) => (prev ? { ...prev, settings: msg.settings as AgentSettings } : prev));
       } else if (msg.kind === "task") {
@@ -228,6 +254,57 @@ export default function App() {
             <p className="mt-1 text-[8px] uppercase tracking-wide text-slate-500">KB sent</p>
           </div>
         </div>
+      )}
+
+      {snap?.lastTimings && (
+        <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">
+          <div className="mb-1.5 flex items-baseline justify-between">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-indigo-400">
+              latency budget
+            </p>
+            <p className="text-[9px] text-slate-500">
+              total{" "}
+              <span
+                className={
+                  (snap.lastTimings.rtt_ms ?? 0) +
+                    snap.lastTimings.extract_ms +
+                    snap.lastTimings.redact_ms +
+                    snap.lastTimings.capture_ms +
+                    snap.lastTimings.vision_ms <=
+                  3500
+                    ? "text-emerald-400"
+                    : "text-rose-400"
+                }
+              >
+                ≤3.5s target
+              </span>
+            </p>
+          </div>
+          <div className="flex flex-col gap-1">
+            {BUDGETS.map(({ key, label, budget }) => {
+              const raw = snap.lastTimings![key];
+              const ms = raw == null ? null : raw;
+              const ratio = (ms ?? 0) / budget;
+              return (
+                <div key={key} className="flex items-center gap-1.5">
+                  <span className="w-14 shrink-0 text-[9px] text-slate-500">{label}</span>
+                  <div className="h-1 flex-1 overflow-hidden rounded-full bg-slate-800">
+                    <div
+                      className={`h-full rounded-full ${ms == null ? "bg-slate-700" : barTone(ratio)}`}
+                      style={{ width: `${Math.min(100, Math.max(2, ratio * 100))}%` }}
+                    />
+                  </div>
+                  <span className="w-16 shrink-0 text-right font-mono text-[9px] text-slate-400">
+                    {ms == null ? "—" : ms < 10 ? `${ms.toFixed(1)}ms` : `${Math.round(ms)}ms`}
+                  </span>
+                  <span className="w-8 shrink-0 text-right text-[8px] text-slate-600">
+                    /{budget}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       <div className="flex flex-col gap-1">

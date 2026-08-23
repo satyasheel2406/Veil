@@ -1,6 +1,7 @@
 from ..llm.base import LLMProvider
 from ..protocol.models import TERMINAL_ACTIONS, ScreenContext
 from ..security.action_validator import validate_actions
+from ..security.injection import sanitize_screen
 
 
 class Orchestrator:
@@ -9,7 +10,8 @@ class Orchestrator:
         self.max_actions = max_actions
 
     async def plan(self, task: str, screen: ScreenContext) -> dict:
-        result = await self.provider.plan(task, screen)
+        screen_llm, _flagged, injection_hits = sanitize_screen(screen)
+        result = await self.provider.plan(task, screen_llm)
         actions, violations = validate_actions(result.actions, screen, self.max_actions)
         if not actions:
             from ..protocol.models import FailAction
@@ -23,6 +25,10 @@ class Orchestrator:
         thought = result.thought
         if violations:
             thought = (thought + " [validator: " + "; ".join(violations[:4]) + "]")[:2000]
+        if injection_hits:
+            thought = (
+                thought + f" [guard: neutralized {injection_hits} prompt-injection pattern(s) in page content]"
+            )[:2000]
         return {
             "thought": thought,
             "actions": actions,

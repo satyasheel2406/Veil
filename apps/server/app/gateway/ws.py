@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 import uuid
 from typing import Any
 
@@ -9,6 +10,7 @@ from fastapi.routing import APIRouter
 
 from ..agent.orchestrator import Orchestrator
 from ..core.config import settings
+from ..core.stats import stats
 from ..llm.registry import get_provider
 from ..protocol.models import ClientHello, PerceptionMsg
 
@@ -74,13 +76,24 @@ async def ws_endpoint(ws: WebSocket) -> None:
                     await _send_error(ws, "bad_perception", f"schema violation: {str(e)[:400]}")
                     continue
                 try:
+                    t0 = time.perf_counter()
                     plan = await asyncio.wait_for(
                         orchestrator.plan(pm.task, pm.screen), timeout=settings.plan_timeout_s + 5
                     )
+                    total_ms = (time.perf_counter() - t0) * 1000
+                    stats.record(
+                        provider=provider.name,
+                        model=str(plan.get("model", "")),
+                        usage_ms=float(plan.get("usage_ms", 0.0)),
+                        total_ms=total_ms,
+                        actions=len(plan["actions"]),
+                    )
                 except asyncio.TimeoutError:
+                    stats.record_failure()
                     await _send_error(ws, "plan_timeout", "planner exceeded time budget")
                     continue
                 except Exception as e:
+                    stats.record_failure()
                     log.exception("planner failure")
                     await _send_error(ws, "plan_error", str(e)[:300])
                     continue

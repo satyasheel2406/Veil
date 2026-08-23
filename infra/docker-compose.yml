@@ -1,0 +1,37 @@
+name: veil
+
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    ports:
+      - "8765:8765"
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-echo}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8765/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  vllm:
+    image: vllm/vllm-openai:latest
+    profiles: ["vllm"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ${HF_CACHE:-~/.cache/huggingface}:/root/.cache/huggingface
+    command: >
+      --model ${VLLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
+      --served-model-name local-planner
+      --max-model-len 8192
+      --gpu-memory-utilization 0.85
+    restart: unless-stopped
+
+# With the vllm profile up, run the gateway against it:
+#   LLM_PROVIDER=vllm LLM_MODEL=local-planner LLM_BASE_URL=http://vllm:8000/v1 docker compose --profile vllm up

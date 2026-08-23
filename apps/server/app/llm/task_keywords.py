@@ -15,6 +15,6 @@ KIND_KEYWORDS: dict[str, tuple[str, ...]] = {
 }
 
 SUBMIT_RE = re.compile(
-    r"\b(sign\s?in|log\s?in|login|submit|next|continue|search|pay|book|confirm|send|place\s+order|get\s+started)\b",
+    r"\b(sign\s?in|log\s?in|login|sign\s?up|signup|register|create\s+account|submit|next|continue|search|pay|book|confirm|send|place\s+order|get\s+started)\b",
     re.I,
 )
