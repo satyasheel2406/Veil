@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.output/
+.wxt/
+stats.html
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+.env
+.env.local
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,25 @@
+{
+  "name": "privacy-vision-agent",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Privacy-preserving browser vision agent: local perception + on-device PII redaction; server reasons only over anonymized structure.",
+  "workspaces": [
+    "apps/extension",
+    "packages/shared-schema"
+  ],
+  "scripts": {
+    "dev:ext": "npm run dev --workspace @pv/extension",
+    "build:ext": "npm run build --workspace @pv/extension",
+    "zip:ext": "npm run zip --workspace @pv/extension",
+    "typecheck": "npm run typecheck --workspace @pv/schema && npm run typecheck --workspace @pv/extension",
+    "server:install": "python -m venv apps/server/.venv && apps/server/.venv/Scripts/python -m pip install -r apps/server/requirements.txt",
+    "server:dev": "apps/server/.venv/Scripts/python -m uvicorn app.main:app --reload --port 8765",
+    "test:server": "apps/server/.venv/Scripts/python -m pytest apps/server/tests -q"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.9"
+  }
+}
