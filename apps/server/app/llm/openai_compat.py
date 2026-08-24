@@ -1,4 +1,5 @@
 import json
+import re
 import time
 from typing import Any, Optional
 
@@ -73,6 +74,18 @@ def _stream_unsupported(err: str) -> bool:
     return "stream" in low and any(
         k in low for k in ("not support", "unsupport", "invalid", "reject", "disallow")
     )
+
+
+_SAFETY_REFUSAL_RE = re.compile(
+    r"user\s*safety|safety\s*categor|content\s*policy|cannot\s+assist|unsafe\b",
+    re.IGNORECASE,
+)
+
+
+def _is_safety_refusal(body_text: str) -> bool:
+    """Detect safety-verdict strings some routed/free models emit as content."""
+    text = body_text.strip()
+    return 0 < len(text) < 400 and bool(_SAFETY_REFUSAL_RE.search(text))
 
 
 class OpenAICompatProvider:
@@ -163,8 +176,28 @@ class OpenAICompatProvider:
                             raise
                         payload.pop("stream", None)
                         body_text = await self._plain_completion(client, payload, headers)
+                    if not body_text.strip():
+                        # Stream produced no usable content (e.g. an in-stream
+                        # error object or a reasoning-only response) — retry
+                        # once without streaming before giving up.
+                        payload.pop("stream", None)
+                        body_text = await self._plain_completion(client, payload, headers)
                 else:
                     body_text = await self._plain_completion(client, payload, headers)
+
+                # Some routed/free models emit a safety-verdict string as
+                # normal content instead of plan JSON. Detect it once and
+                # retry; if it persists the model is unsuitable, not broken.
+                for attempt in range(2):
+                    if not _is_safety_refusal(body_text):
+                        break
+                    body_text = await self._plain_completion(client, payload, headers)
+                else:
+                    raise ProviderError(
+                        f"{self.name} kept refusing the request via its safety "
+                        f"filter ({body_text[:120]!r}). Switch to a concrete "
+                        "model instead of a rotating free pool."
+                    )
         except httpx.HTTPStatusError as e:
             raise ProviderError(f"{self.name} HTTP {e.response.status_code}: {e.response.text[:300]}") from e
         except (httpx.HTTPError, ValueError) as e:
@@ -181,7 +214,9 @@ class OpenAICompatProvider:
                     actions.append(a)
             return _typed_plan(thought, actions, self.describe(), usage_ms)
         except (ValueError, TypeError) as e:
-            raise ProviderError(f"{self.name} returned malformed plan JSON: {e}") from e
+            raise ProviderError(
+                f"{self.name} returned malformed plan JSON: {e}; got: {body_text[:200]!r}"
+            ) from e
 
     async def _plain_completion(
         self,
@@ -221,6 +256,16 @@ class OpenAICompatProvider:
                     chunk = json.loads(data)
                 except ValueError:
                     continue
+                # OpenRouter/free tiers deliver failures as SSE data objects
+                # with HTTP 200 — surface them instead of yielding dead air.
+                if chunk.get("error") is not None:
+                    err = chunk["error"]
+                    detail = (
+                        err.get("message", json.dumps(err))
+                        if isinstance(err, dict)
+                        else str(err)
+                    )
+                    raise ProviderError(f"{self.name} stream error: {detail}")
                 choices = chunk.get("choices") or [{}]
                 piece = ((choices[0].get("delta") or {}).get("content")) or ""
                 if piece:

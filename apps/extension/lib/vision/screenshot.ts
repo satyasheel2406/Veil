@@ -1,6 +1,6 @@
 import type { ImageRegion } from "@pv/schema";
-import { detectFaces, type FaceBox } from "./face-detector";
-import { detectSensitiveTextRects } from "./ocr";
+import { detectFacesSmart, type FaceBox } from "./face-detector";
+import { detectTextRectsSmart } from "./ocr";
 
 export interface SensitiveRect {
   x: number;
@@ -13,6 +13,7 @@ export interface VisionResult {
   region: ImageRegion | null;
   facesBlurred: number;
   detectorAvailable: boolean;
+  detectorError?: string;
   ocrMasked: number;
   ocrAvailable: boolean;
 }
@@ -83,18 +84,21 @@ export async function redactScreenshot(
   // that DOM inspection can never see. Failure here never blocks DOM blackouts.
   let faceBoxes: FaceBox[] = [];
   let detectorAvailable = true;
+  let detectorError: string | undefined;
   try {
-    faceBoxes = await detectFaces(canvas);
-  } catch {
+    const { faces } = await detectFacesSmart(dataUrl, canvas);
+    faceBoxes = faces;
+  } catch (e) {
     faceBoxes = [];
     detectorAvailable = false;
+    detectorError = e instanceof Error ? e.message : String(e);
   }
 
   let ocrMasked = 0;
   let ocrAvailable = false;
   if (ocrEnabled) {
     try {
-      const ocr = await detectSensitiveTextRects(bitmap);
+      const ocr = await detectTextRectsSmart(dataUrl, bitmap);
       ocrAvailable = ocr.available;
       for (const r of ocr.rects) {
         blackOut(ctx, expand(r));
@@ -136,6 +140,7 @@ export async function redactScreenshot(
     },
     facesBlurred,
     detectorAvailable,
+    detectorError,
     ocrMasked,
     ocrAvailable,
   };

@@ -1,4 +1,5 @@
 import type { SensitiveRect } from "./screenshot";
+import { offscreenSupported, requestOffscreen } from "./offscreen-bridge";
 
 /**
  * Opt-in OCR pass (default OFF). When enabled, renders-in-image text
@@ -20,7 +21,7 @@ export interface OcrResult {
 let enginePromise: Promise<TesseractishWorker | null> | null = null;
 let permanentlyUnavailable = false;
 
-interface TesseractishWord {
+export interface TesseractishWord {
   text?: string;
   confidence?: number;
   bbox?: { x0: number; y0: number; x1: number; y1: number };
@@ -56,7 +57,7 @@ const TEXT_PATTERNS: RegExp[] = [
   /(?:\+?\d[\d\s().-]{8,17}\d)/, // phone-ish
 ];
 
-function looksSensitive(text: string): boolean {
+export function looksSensitive(text: string): boolean {
   return TEXT_PATTERNS.some((re) => re.test(text));
 }
 
@@ -81,7 +82,7 @@ async function getEngine(): Promise<TesseractishWorker | null> {
   return enginePromise;
 }
 
-function collectWords(data: { words?: TesseractishWord[]; blocks?: TesseractishBlock[] | null }): TesseractishWord[] {
+export function collectWords(data: { words?: TesseractishWord[]; blocks?: TesseractishBlock[] | null }): TesseractishWord[] {
   const flat = data.words ?? [];
   if (flat.length > 0) return flat;
   const out: TesseractishWord[] = [];
@@ -93,6 +94,29 @@ function collectWords(data: { words?: TesseractishWord[]; blocks?: TesseractishB
     }
   }
   return out;
+}
+
+/**
+ * Route OCR through the offscreen document where tesseract can actually run
+ * (Chrome MV3 service workers cannot spawn its worker). Falls back to a
+ * local in-context attempt on Firefox background pages. Returns
+ * available:false when OCR simply cannot run — never throws.
+ */
+export async function detectTextRectsSmart(dataUrl: string, bitmap: ImageBitmap): Promise<OcrResult> {
+  if (offscreenSupported()) {
+    try {
+      const resp = await requestOffscreen<{ ok: true; rects?: SensitiveRect[]; available?: boolean }>(
+        { type: "OCR_TEXT", dataUrl },
+        45000, // first call includes tesseract's lang-data download
+        "ocr"
+      );
+      return { rects: resp.rects ?? [], available: Boolean(resp.available) };
+    } catch (e) {
+      console.warn("[veil] offscreen OCR failed:", e);
+      return { rects: [], available: false };
+    }
+  }
+  return detectSensitiveTextRects(bitmap);
 }
 
 export async function detectSensitiveTextRects(bitmap: ImageBitmap): Promise<OcrResult> {

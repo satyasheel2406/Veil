@@ -40,7 +40,8 @@ export default defineContentScript({
     let map: PlaceholderMap | null = null;
 
     browser.runtime.onMessage.addListener((msg: unknown) => {
-      const m = msg as { type?: string; actions?: AgentAction[]; clearMap?: boolean };
+      const m = msg as { type?: string; actions?: AgentAction[]; clearMap?: boolean; target?: string };
+      if (m?.target) return undefined; // inter-context messages (e.g. offscreen)
       if (m?.type === "EXTRACT") {
         return (async () => {
           try {

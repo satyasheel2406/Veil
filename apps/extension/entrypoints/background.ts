@@ -185,6 +185,9 @@ export default defineBackground(() => {
           .catch((e) => ({ ok: false, error: String(e) }));
       case "SET_SETTING":
         if (m.key && typeof m.value === "boolean" && m.key in DEFAULT_SETTINGS) {
+          // Update the live cache too — turns read from `settings`, not
+          // storage, and MV3 workers can stay alive across setting changes.
+          (settings as unknown as Record<string, boolean>)[m.key] = m.value;
           void browser.storage.local.set({ [m.key]: m.value });
         }
         return Promise.resolve({ ok: true });
@@ -221,11 +224,57 @@ interface ExtractResponse {
   timings?: { extract_ms: number; redact_ms: number; serialize_ms: number };
   sensitiveRects?: SensitiveRect[];
   dpr?: number;
+  detectorError?: string;
 }
 
 interface BgTab {
   id?: number;
   windowId?: number;
+}
+
+/** Send a message to the tab's content script, recovering when the receiver is
+ *  gone — either because the page predates the last extension reload or because
+ *  an action just navigated the tab and the content script died mid-flight. */
+const RETRYABLE_SEND_ERRORS = [
+  "receiving end does not exist",
+  "message port closed",
+  "message channel closed",
+  "asynchronous response",
+];
+
+function isRetryableSendError(err: unknown): boolean {
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return RETRYABLE_SEND_ERRORS.some((p) => msg.includes(p));
+}
+
+async function waitTabComplete(tabId: number, timeoutMs = 10000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const tab = await browser.tabs.get(tabId);
+      if (tab.status === "complete") return;
+    } catch {
+      return; // tab gone — let the next sendMessage surface the real error
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}
+
+async function tabSend<T = unknown>(tabId: number, message: unknown): Promise<T> {
+  try {
+    return (await browser.tabs.sendMessage(tabId, message)) as T;
+  } catch (e) {
+    if (!isRetryableSendError(e)) throw e;
+    // Navigation or stale injection: let the new document finish loading,
+    // reinject the content script, give listeners a beat, then retry once.
+    await waitTabComplete(tabId);
+    await browser.scripting.executeScript({
+      target: { tabId },
+      files: ["/content-scripts/content.js"],
+    });
+    await new Promise((r) => setTimeout(r, 200));
+    return (await browser.tabs.sendMessage(tabId, message)) as T;
+  }
 }
 
 async function captureSanitizedScreen(
@@ -237,6 +286,7 @@ async function captureSanitizedScreen(
   region: ScreenContext["image_regions"][number] | null;
   faces: number;
   detectorAvailable: boolean;
+  detectorError?: string;
   ocrMasked: number;
   ocrAvailable: boolean;
   rawDataUrl: string;
@@ -254,6 +304,7 @@ async function captureSanitizedScreen(
       region: result.region,
       faces: result.facesBlurred,
       detectorAvailable: result.detectorAvailable,
+      detectorError: result.detectorError,
       ocrMasked: result.ocrMasked,
       ocrAvailable: result.ocrAvailable,
       rawDataUrl: dataUrl,
@@ -261,7 +312,7 @@ async function captureSanitizedScreen(
   } catch (e) {
     timings.vision_ms = round1(performance.now() - t1);
     log("warn", "vision", `screenshot sanitization failed: ${e instanceof Error ? e.message : e}`);
-    return { region: null, faces: 0, detectorAvailable: false, ocrMasked: 0, ocrAvailable: false, rawDataUrl: dataUrl };
+    return { region: null, faces: 0, detectorAvailable: false, detectorError: e instanceof Error ? e.message : String(e), ocrMasked: 0, ocrAvailable: false, rawDataUrl: dataUrl };
   }
 }
 
@@ -286,7 +337,7 @@ async function runTask(task: string): Promise<void> {
       if (stopRequested) break;
 
       const extractStart = performance.now();
-      const resp: ExtractResponse = await browser.tabs.sendMessage(tabId, { type: "EXTRACT" });
+      const resp: ExtractResponse = await tabSend<ExtractResponse>(tabId, { type: "EXTRACT" });
       if (!resp?.ok) throw new Error(resp?.error ?? "extraction failed");
       const wallMs = performance.now() - extractStart;
 
@@ -333,7 +384,7 @@ async function runTask(task: string): Promise<void> {
 
       if (settings.visionEnabled) {
         const dpr = resp.dpr ?? 1;
-        const { region, faces, detectorAvailable, ocrMasked, ocrAvailable, rawDataUrl } =
+        const { region, faces, detectorAvailable, detectorError, ocrMasked, ocrAvailable, rawDataUrl } =
           await captureSanitizedScreen(tab, resp.sensitiveRects ?? [], dpr, timings);
         if (region) {
           screen.image_regions = [region];
@@ -341,7 +392,11 @@ async function runTask(task: string): Promise<void> {
           lastStats.screenshotKb = Math.round((region.data_b64.length * 0.75) / 1024);
           const domBoxes = resp.sensitiveRects?.length ?? 0;
           if (!detectorAvailable) {
-            log("warn", "vision", "face detector unavailable — DOM-derived blackouts still applied");
+            log(
+              "warn",
+              "vision",
+              `face detector unavailable — DOM-derived blackouts still applied${detectorError ? ` (${detectorError})` : ""}`
+            );
           } else {
             log(
               "success",
@@ -350,12 +405,14 @@ async function runTask(task: string): Promise<void> {
               round1(timings.capture_ms + timings.vision_ms)
             );
           }
-          if (settings.ocrEnabled) {
-            if (ocrAvailable && ocrMasked > 0) {
-              log("success", "ocr", `OCR masked ${ocrMasked} sensitive text region(s) rendered in images/canvas`);
-            } else if (!ocrAvailable) {
-              log("warn", "ocr", "OCR engine unavailable in this context — toggle has no effect");
-            }
+          if (!settings.ocrEnabled) {
+            log("info", "ocr", "OCR disabled — enable 'OCR text masking' to scan text rendered in images");
+          } else if (ocrAvailable && ocrMasked > 0) {
+            log("success", "ocr", `OCR masked ${ocrMasked} sensitive text region(s) rendered in images/canvas`);
+          } else if (ocrAvailable) {
+            log("info", "ocr", "OCR ran — no sensitive text found in rendered images");
+          } else {
+            log("warn", "ocr", "OCR enabled but engine failed — see SW console for details");
           }
           lastStats.facesBlurred = faces;
         }
@@ -364,6 +421,7 @@ async function runTask(task: string): Promise<void> {
         const t0class = performance.now();
         try {
           const { classifyScreen } = await import('@/lib/vision/screen-classifier');
+          log('info', 'vit', 'loading screen classifier (first run may download ~90MB)…');
           const classifications = await classifyScreen(rawDataUrl);
           if (classifications.length > 0) {
             screen.screen_class = classifications;
@@ -406,7 +464,11 @@ async function runTask(task: string): Promise<void> {
       const executable = terminalIdx >= 0 ? actions.slice(0, terminalIdx) : actions;
 
       if (executable.length > 0) {
-        const execResp = await browser.tabs.sendMessage(tabId, { type: "EXECUTE", actions: executable });
+        const execResp = await tabSend<{
+          ok: boolean;
+          error?: string;
+          results?: Array<{ ok: boolean; action_index: number; error?: string }>;
+        }>(tabId, { type: "EXECUTE", actions: executable });
         if (!execResp?.ok) throw new Error(execResp?.error ?? "execution failed");
         const failures = (execResp.results ?? []).filter((r: { ok: boolean }) => !r.ok);
         if (failures.length > 0) log("warn", "execute", `${failures.length} action(s) failed`, undefined);
