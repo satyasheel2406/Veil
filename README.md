@@ -6,73 +6,88 @@ anonymized data to the server for LLM reasoning. The server orchestrates actions
 (click / fill / scroll) that the extension executes — without ever seeing your actual data.
 
 ```
-┌────────────────────────── BROWSER ──────────────────────────┐      ┌──────────────────── SERVER ────────────────────┐
-│  content script (per tab)                                   │      │  FastAPI gateway (WebSocket /ws)               │
-│   ├ DOM → element graph (roles, names, rects, stable IDs)   │      │    └ Orchestrator (bounded ReAct-style loop)   │
-│   ├ Layer 1 · regex engine → [EMAIL_1]-style placeholder    │ WSS  │        ├ LLM provider (pluggable)              │
-│   │   refs; values stay in a local PlaceholderMap           │ ───► │        │  echo | groq | openrouter | vllm       │
-│   ├ Layer 2 · name/entity masking (heuristic NER)           │ ◄─── │        └ action validator (target/ref allowlist)│
-│   └ action executor (click/fill/scroll/nav + safety gates)  │ plan │  receives ONLY anonymized structure + already- │
-│  background service worker                                  │      │  redacted pixels — never raw values            │
-│   ├ WS session, seq-correlated request/response             │      └────────────────────────────────────────────────┘
-│   ├ Layer 3 · screenshot sanitization (OffscreenCanvas):    │
-│   │   captureVisibleTab → PII rects blacked out →           │
-│   │   BlazeFace detection → faces blurred/blackened → WebP  │
-│   └ timing marks for every pipeline stage                   │
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────────── BROWSER ─────────────────────────────┐      ┌────────────────── SERVER ──────────────────┐
+│  content script (per tab)                                          │      │  FastAPI gateway (WebSocket /ws)           │
+│   ├ DOM (+shadow/iframes) → element graph w/ stable IDs            │      │    └ Orchestrator (bounded loop, memory)   │
+│   ├ regex engine → [EMAIL_1]-style refs; values live ONLY in       │ WSS  │        ├ LLM provider (pluggable)          │
+│   │   the page-local PlaceholderMap                                │ ───► │        │ echo | groq | openrouter | vllm    │
+│   ├ name masking (heuristic cues, optional DistilBERT NER)         │ ◄─── │        │ streamed plan_delta tokens         │
+│   └ action executor (click/fill/scroll/nav + safety gates)         │ plan │        └ action validator (allowlists)     │
+│  background service worker                                         │      │  receives ONLY anonymized structure and    │
+│   ├ WS session, multi-turn history, first_turn reset               │      │  pre-redacted pixels — never raw values    │
+│   ├ ViT screen classifier (Transformers.js/ONNX, wasm)             │      └────────────────────────────────────────────┘
+│   ├ screenshot sanitization (OffscreenCanvas): PII blackouts       │
+│   └ OFFSCREEN DOCUMENT (hidden DOM page, Chrome MV3):              │
+│       BlazeFace face detection (tiled, CPU/GPU) +                  │
+│       tesseract.js OCR — models that cannot run in a SW            │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 **The key mechanism:** when the server decides `{"type":"fill","target":15,"ref":"[EMAIL_1]"}`,
 the real value is resolved from a map held *only* inside the page's content script. The email
 never exists outside the machine, yet multi-step workflows still complete.
 
-## Privacy pipeline (3 layers on-device + server-side guard)
+## Privacy & perception pipeline (on-device layers + server-side guard)
 
-| Layer | What it masks | Where | Cost |
+| Layer | What it does | Where | Cost |
 |---|---|---|---|
-| 1 · Structural regex | emails, phones (+digit-count validation), cards (**Luhn-verified**), SSN/Aadhaar/IBAN, API keys — in field names, values, titles | content script | ~1–3 ms |
-| 2 · Entity masking | person-name runs in text values (`[PERSON_NAME_101]…`) | background | <1 ms |
-| 3 · Pixel redaction (vision-first) | **BlazeFace reads the RAW frame before anything else** and its detections decide extra redaction regions — catching faces inside `<img>/<canvas>/<video>` that DOM inspection cannot see; then element rects → black boxes, faces → blur/black; WebP q0.72 | background OffscreenCanvas + BlazeFace (230 KB model, GPU→CPU fallback) | ~30–80 ms |
-| 4 · Prompt-injection guard | instruction-override / role-hijack / placeholder-exfiltration patterns + zero-width steganography → `[INJECTION_BLOCKED]`; flagged in popup log & plan thought | client `lib/security` **and** mirrored server-side (`app/security/injection.py`) before any LLM sees the payload | <1 ms |
+| 1 · Structural regex | emails, phones (+digit-count validation), cards (**Luhn-verified**), SSN/Aadhaar/IBAN, API keys, account numbers — in field names, values, titles | content script | ~1–3 ms |
+| 2 · Entity masking | person-name runs via greeting cues; optional DistilBERT NER toggle (`AI name detection`) | background / offscreen | <1 ms – ~300 ms |
+| 3 · ViT screen understanding | Xenova/vit-base-patch16-224 (Transformers.js, wasm-only after WebGPU hangs) classifies each frame for the planner; hard watchdogs: 90 s load / 45 s inference → graceful skip, never stalls a task | background | 0.6–3 s warm |
+| 4 · Pixel redaction (vision-first) | **BlazeFace reads the RAW frame before anything else** and its detections decide extra redaction regions — catching faces inside `<img>/<canvas>/<video>` DOM cannot see. Tiled pass (frame + four overlapping 60% tiles → NMS merge) catches small grid portraits; element rects → black boxes, faces → blur/black; WebP q0.72 | offscreen document (MediaPipe), compositing in SW | ~0.2–1 s |
+| 5 · OCR text masking (opt-in) | tesseract.js recognizes text rendered into images/canvas that DOM extraction can never see; sensitive-pattern words blacked out. Fully self-hosted assets (worker + wasm core + eng traineddata in the extension) — CSP-clean and offline-capable | offscreen document | first init ~10 s, then ~1 s/frame |
+| 6 · Prompt-injection guard | instruction-override / role-hijack / placeholder-exfiltration patterns + zero-width steganography → `[INJECTION_BLOCKED]`; flagged in popup log & plan thought | client `lib/security` **and** mirrored server-side (`app/security/injection.py`) before any LLM sees the payload | <1 ms |
 
 Sensitive-value detection also uses form semantics: `type=password`, `autocomplete`
 tokens (email/tel/name/cc-*), and label context hints — so fields are masked even before
-regex would fire.
-
-The LLM system prompt additionally declares all page text untrusted data and forbids
+regex would fire. The LLM system prompt declares all page text untrusted data and forbids
 acting on embedded instructions or repeating anything behind a ref.
+
+> **Why an offscreen document?** MV3 service workers cannot `importScripts()` after
+> installation (blocks MediaPipe's wasm loader) and hidden documents defer DOM image
+> decoding (blocks `<img>` pipelines). The offscreen page is Chrome's sanctioned escape
+> hatch: full DOM APIs, message-wired to the worker. Firefox has no such restriction —
+> its background *page* runs the fallbacks directly.
 
 ## Repository layout
 
 ```
 apps/
-  extension/               WXT — one codebase → Chrome MV3 + Firefox (~12 MB total)
+  extension/               WXT — one codebase → Chrome MV3 + Firefox
     entrypoints/
-      background.ts        agent loop, vision pipeline, settings, WS client wiring
-      content.ts           per-page extractor + executor bridge
-      popup/               React + Tailwind dashboard (toggles, stats, live log, timings)
+      background.ts        agent loop, vision orchestration, settings, WS client wiring
+      content.ts           per-page extractor + executor bridge (PlaceholderMap lives here)
+      popup/               React + Tailwind dashboard (toggles, stats, live log, timings,
+                           streaming "thinking" card, server URL + auth token fields)
+      offscreen/           hidden DOM page: MediaPipe face detection + tesseract.js OCR
     lib/
-      perception/          DOM→element-graph extractor (+ sensitive-rect collection)
-      privacy/             regex engine, PlaceholderMap, entity masking
+      perception/          DOM→element-graph extractor (+ sensitive-rect collection),
+                           shadow-DOM & same-origin iframe traversal
+      privacy/             regex engine, PlaceholderMap, entity masking, ML NER wrapper
       security/            prompt-injection guard (pattern scrub + element flagging)
-      vision/              BlazeFace detector + screenshot redact/export pipeline
+      vision/              screen-classifier (ViT), face-detector, ocr, offscreen-bridge,
+                           screenshot redact/export pipeline
       executor/            action runner with safety gates
       geometry/            IoU utilities (redaction scoring)
-      ws-client.ts         reconnecting socket w/ seq correlation + keepalive
-      __tests__/           vitest suites (PII precision/recall corpus, IoU)
+      ws-client.ts         reconnecting socket w/ seq correlation, keepalive, plan_delta,
+                           optional ?token= auth
+   models/, tasks-vision/, tesseract/   self-hosted on-device model assets (public/)
   server/                  FastAPI app
-    app/gateway/ws.py      WebSocket endpoint, session handling, origin check
-    app/agent/             orchestrator
+    app/gateway/ws.py      WebSocket endpoint: sessions, origin check, optional token gate
+                           (?token= → close 4001), sliding-window rate limiter (close 4008)
+    app/agent/             orchestrator — bounded loop, multi-turn memory, first_turn reset
     app/llm/               provider registry: echo | groq | openrouter | vllm
-                           (OpenAI-compatible wire format incl. image parts for VLMs)
+                           (OpenAI-compatible wire; SSE streaming; image parts for VLMs;
+                           in-stream error + safety-refusal detection with retries)
     app/security/          action validator (unknown targets/refs rejected server-side too)
                            + injection guard (mirrors client scrubbing before LLM)
     app/protocol/models.py pydantic mirror of the Zod contracts
-    tests/                 protocol round-trip + validator suite (pytest)
+    tests/                 protocol round-trip, validator suite, golden multi-page tasks
 packages/shared-schema/    Zod contracts — single source of truth
-demo/login.html            fake bank sign-in seeded with fictional PII
-eval/                      benchmark pages + metric runners (growing)
-infra/                     docker-compose deployment — Phase 6
+demo/                      login.html, dashboard.html, transfer.html, confirmation.html,
+                           faces.html (face-blur gallery)
+eval/                      layout corpus + latency probe (plan_delta-aware)
+infra/                     docker-compose deployment
 ```
 
 ## Quickstart
@@ -103,27 +118,32 @@ Load into Chrome:
 
 Firefox: load `.output/firefox-mv2` via `about:debugging` → **Load Temporary Add-on**.
 
-### 3. Run a task end-to-end
+### 3. Run tasks end-to-end
 
-1. Start the server (`npm run server:dev`)
-2. Open `http://localhost:8765/demo/login.html` — a fake banking sign-in
-3. Click **Fill demo data** on the page (inserts fictional email/password)
-4. Click the **Veil** toolbar icon, type `Log in to my account`, press **Run task**
-5. Watch the pipeline live in the popup: extraction/redact/capture/vision timings,
-   "N sensitive values masked", "faces blurred", sanitized-screenshot size, server
-   thought, executed actions, wall-clock total.
-
-The log shows fills referencing `[EMAIL_1]` / `[PASSWORD_1]` — proof the raw values stayed
-local while the workflow completed.
+1. Start the server (`npm run server:dev`) and configure a planner (see below)
+2. **Multi-page transfer** — open `demo/dashboard.html`, task:
+   `Send 500 to Rahul Sharma`
+   → the agent clicks *Transfer Money*, fills recipient via `[PERSON_NAME_1]` +
+   amount `500`, submits, detects the confirmation page, and reports done
+   (~30 s end-to-end on a free-tier cloud model).
+3. **Login with refs** — open `demo/login.html`, click **Fill demo data**, task:
+   `Log in to my account` — the plan references `[EMAIL_1]/[PASSWORD_1]`; the raw
+   values never leave the machine.
+4. **Face privacy** — open `demo/faces.html` (needs internet for the photos),
+   any task: the vision line reports `N face(s) blurred` — and the server's own
+   thought confirms it *sees* blurred faces in the sanitized image.
+5. Watch every stage live in the popup log: redact / ner / vision / ocr / vit /
+   plan / execute, with timings and the streaming "thinking" card.
 
 ### Popup controls
 
 | Toggle | Effect |
 |---|---|
-| Sanitized screenshot | enables Layer-3 pixel redaction + sends the cleaned image |
+| Sanitized screenshot | enables pixel redaction + sends the cleaned image |
 | Blur faces (vs blackout) | face regions blurred instead of solid black |
-| AI name detection | Layer-2 entity masking pass |
-| Server URL | click the footer to point at any backend |
+| AI name detection | DistilBERT NER pass over text values (model downloads once) |
+| OCR text masking | scans text baked into images/canvas; opt-in, assets self-hosted |
+| Server URL / auth token | footer fields — point at any backend, shared gateway secret |
 
 ## Tests & metrics
 
@@ -152,15 +172,17 @@ Current status against SIH criteria:
 
 | Metric | Target | Current |
 |---|---|---|
-| Visual context accuracy (M1) | qualitative+quantitative | DOM element graph with roles/names/rects; on-device BlazeFace reads raw frames and drives redaction decisions (vision-first) |
-| PII detection precision / recall (M2) | ≥85% / ≥90% | **100% / 100%** — 21-sample text corpus + 4 labeled screen layouts |
+| Visual context accuracy (M1) | qualitative+quantitative | DOM graph (incl. shadow/iframes) + ViT frame classification + sanitized screenshot region; vision-first redaction decisions |
+| PII detection precision / recall (M2) | ≥85% / ≥90% | **100% / 100%** — 21-sample text corpus + 8 labeled screen layouts |
 | Precision of redaction (M3) | box-level IoU | **P=100%, R=100%, matched-IoU=1.000** across `eval/fixtures/layouts.json` (incl. decoy labels); greedy IoU@0.5 matching in vitest |
-| Client package size / runtime (M4) | minimal | 12.1 MB total; content script **12 kB**, background **209 kB**; per-task SW-heap + device-RAM logged in popup (`perf` line) |
-| E2E demo latency (M5) | p50 ≤3.5 s | echo: **p50 = 3 ms** (probe, 20/20 PASS); live VLM (openrouter/free): ~8 s planner — trade-off documented, budget panel shows both |
+| Client package size / runtime (M4) | minimal | on-device models are lazy per feature; redaction <1 ms; ViT warm 0.6–3 s, faces ~0.2 s/frame, OCR ~1 s/frame. Trade-off note: Transformers.js bundling puts `background.js` at ~63 MB disk — a documented cost of full offline capability (RAM footprint stays modest; offscreen-document split is the slimming path) |
+| E2E demo latency (M5) | p50 ≤3.5 s | echo planner: p50 ≈ 1 ms (probe PASS); real demos 7–30 s dominated by cloud LLM turns (~1 s/plan on free Nemotron) — budget panel shows both |
 
 Golden tasks (`apps/server/tests/test_golden_tasks.py`) lock plan quality end-to-end:
-login fill→fill→click→done, signup multi-field mapping, prompt-injection resilience
-(plan unaffected + guard note), and validator rejection of rogue provider output.
+login fill→fill→click→done, signup multi-field mapping, the multi-page transfer flow
+(dashboard click → refs+amount fills+submit, *no* premature done until confirmation),
+`first_turn` memory reset, prompt-injection resilience (plan unaffected + guard note),
+and validator rejection of rogue provider output.
 
 ## Switching to a real LLM
 
@@ -172,11 +194,14 @@ LLM_MODEL=meta-llama/llama-4-scout-17b-16e-instruct
 LLM_API_KEY=gsk_...
 ```
 
-- `echo` — deterministic heuristic planner, fully offline; maps known `[REF]`s onto
-  matching empty fields by label keywords, then clicks submit-like buttons. Great for
-  demos without keys and for CI.
+- `echo` — deterministic heuristic planner, fully offline; drives the multi-page
+  demo flow (dashboard→transfer→confirmation) and CI without any keys.
 - `groq` / `openrouter` — cloud-hosted open-weight models during SIH. VLM models receive
   the sanitized screenshot as an image part; text-only models just get the structure.
+  **Pin a concrete model** — rotating pools (`openrouter/free`) randomly serve tiny
+  over-censored models that break JSON plans; e.g. `nvidia/nemotron-3-super-120b-a12b:free`.
+  The provider also auto-retries in-stream SSE errors and safety-refusal verdicts
+  (`User Safety: unsafe …`) with plain completions before surfacing a clear error.
 - `vllm` — self-hosted production path (same OpenAI-compatible contract).
 
 The system prompt explicitly tells the model that boxed/blurred regions are redacted and
@@ -244,8 +269,15 @@ plans exceeding the action cap.
       shadow-DOM/same-origin iframe traversal, PlaceholderMap persistence across pages,
       multi-page golden flows (dashboard→transfer→confirmation), multi-turn orchestrator
       memory with `first_turn` reset
-- [x] Phase 8 — OCR text masking (tesseract.js, opt-in toggle, lazy CDN assets, graceful
-      SW degradation), WS auth token + rate limiter + WSS docs, streaming `plan_delta`
-      thought frames end-to-end (provider SSE → gateway → popup "thinking" card),
-      account-number & address field detection, greeting-cue name masking
+- [x] Phase 8 — OCR text masking (tesseract.js, opt-in toggle, self-hosted worker/wasm/lang
+      assets in-extension → CSP-clean + offline), WS auth token + rate limiter + WSS docs,
+      streaming `plan_delta` thought frames end-to-end (provider SSE → gateway → popup
+      "thinking" card), account-number & address field detection, greeting-cue name masking
       (eval: P=100% R=100% IoU=1.000 over 8 layouts)
+- [x] Phase 9 — offscreen-document architecture for DOM-dependent models (MediaPipe faces
+      + tesseract OCR) with watchdog timeouts at every hop; tiled face detection
+      (frame + 4 overlapping tiles → NMS) for small portraits; ViT wasm-only with
+      load/inference watchdogs; MV3 CSP `wasm-unsafe-eval`; content-script auto-reinjection
+      across navigations; live-verified end-to-end: multi-page transfer (~30 s), ref-based
+      login (~20 s), face gallery (10/10 faces blurred @ ~230 ms), OCR masking of
+      in-image PII
