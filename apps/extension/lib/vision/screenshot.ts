@@ -1,5 +1,6 @@
 import type { ImageRegion } from "@pv/schema";
 import { detectFaces, type FaceBox } from "./face-detector";
+import { detectSensitiveTextRects } from "./ocr";
 
 export interface SensitiveRect {
   x: number;
@@ -11,6 +12,9 @@ export interface SensitiveRect {
 export interface VisionResult {
   region: ImageRegion | null;
   facesBlurred: number;
+  detectorAvailable: boolean;
+  ocrMasked: number;
+  ocrAvailable: boolean;
 }
 
 const REGION_REF = "[SCREEN_1]";
@@ -65,13 +69,41 @@ export async function redactScreenshot(
   dataUrl: string,
   sensitiveRects: SensitiveRect[],
   dpr: number,
-  blurFaces: boolean
+  blurFaces: boolean,
+  ocrEnabled = false
 ): Promise<VisionResult> {
   const bitmap = await toBitmap(dataUrl);
   const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
   const ctx = canvas.getContext("2d", { willReadFrequently: false });
-  if (!ctx) return { region: null, facesBlurred: 0 };
+  if (!ctx) return { region: null, facesBlurred: 0, detectorAvailable: false, ocrMasked: 0, ocrAvailable: false };
   ctx.drawImage(bitmap, 0, 0);
+
+  // Vision-first pass: the on-device models evaluate the RAW frame and decide
+  // additional regions to redact — including faces and rendered-in-image text
+  // that DOM inspection can never see. Failure here never blocks DOM blackouts.
+  let faceBoxes: FaceBox[] = [];
+  let detectorAvailable = true;
+  try {
+    faceBoxes = await detectFaces(canvas);
+  } catch {
+    faceBoxes = [];
+    detectorAvailable = false;
+  }
+
+  let ocrMasked = 0;
+  let ocrAvailable = false;
+  if (ocrEnabled) {
+    try {
+      const ocr = await detectSensitiveTextRects(bitmap);
+      ocrAvailable = ocr.available;
+      for (const r of ocr.rects) {
+        blackOut(ctx, expand(r));
+        ocrMasked++;
+      }
+    } catch {
+      ocrAvailable = false;
+    }
+  }
   bitmap.close();
 
   for (const raw of sensitiveRects) {
@@ -79,12 +111,6 @@ export async function redactScreenshot(
   }
 
   let facesBlurred = 0;
-  let faceBoxes: FaceBox[] = [];
-  try {
-    faceBoxes = await detectFaces(canvas);
-  } catch {
-    faceBoxes = [];
-  }
   for (const f of faceBoxes) {
     const ok = blurFaces && blurRegion(ctx, canvas, f);
     if (!ok) blackOut(ctx, f);
@@ -109,5 +135,8 @@ export async function redactScreenshot(
       data_b64: btoa(binary),
     },
     facesBlurred,
+    detectorAvailable,
+    ocrMasked,
+    ocrAvailable,
   };
 }

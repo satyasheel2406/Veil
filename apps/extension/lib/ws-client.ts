@@ -11,14 +11,18 @@ interface Pending {
 }
 
 export const DEFAULT_SERVER_URL = "ws://localhost:8765/ws";
+export const DEFAULT_AUTH_TOKEN = "";
 
 export class AgentSocket {
   status: SocketStatus = "closed";
   onStatus: ((s: SocketStatus, detail?: string) => void) | null = null;
   onEvent: ((e: { kind: string; message: string }) => void) | null = null;
+  /** Streaming thought deltas from the server (P4). Keyed by request seq. */
+  onPlanDelta: ((seq: number, delta: string) => void) | null = null;
 
   private ws: WebSocket | null = null;
   private url = DEFAULT_SERVER_URL;
+  private token = DEFAULT_AUTH_TOKEN;
   private session = `sess-${Math.random().toString(36).slice(2, 10)}`;
   private seq = 0;
   private pending = new Map<number, Pending>();
@@ -27,8 +31,9 @@ export class AgentSocket {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   async loadUrl(): Promise<void> {
-    const stored = await browser.storage.local.get("serverUrl");
+    const stored = await browser.storage.local.get(["serverUrl", "authToken"]);
     if (typeof stored.serverUrl === "string" && stored.serverUrl) this.url = stored.serverUrl;
+    if (typeof stored.authToken === "string") this.token = stored.authToken;
   }
 
   async setUrl(url: string): Promise<void> {
@@ -37,8 +42,18 @@ export class AgentSocket {
     this.disconnect();
   }
 
+  async setToken(token: string): Promise<void> {
+    this.token = token.trim();
+    await browser.storage.local.set({ authToken: this.token });
+    this.disconnect();
+  }
+
   currentUrl(): string {
     return this.url;
+  }
+
+  hasToken(): boolean {
+    return this.token.length > 0;
   }
 
   disconnect(): void {
@@ -76,7 +91,9 @@ export class AgentSocket {
   private connect(): void {
     this.setStatus("connecting");
     try {
-      this.ws = new WebSocket(this.url);
+      const wsUrl = new URL(this.url);
+      if (this.token) wsUrl.searchParams.set("token", this.token);
+      this.ws = new WebSocket(wsUrl.toString());
     } catch (e) {
       this.setStatus("closed", String(e));
       return;
@@ -115,7 +132,7 @@ export class AgentSocket {
       session: this.session,
       caps: {
         webgpu: "gpu" in navigator,
-        dpr: window.devicePixelRatio || 1,
+        dpr: (typeof window !== "undefined" ? window.devicePixelRatio : globalThis.devicePixelRatio) || 1,
       },
     });
   }
@@ -163,6 +180,13 @@ export class AgentSocket {
       this.setStatus("open", `${msg.provider}:${msg.model}`);
       this.welcomeWaiter?.resolve();
       this.welcomeWaiter = null;
+      return;
+    }
+
+    // Streaming thought deltas: forwarded to listeners, never resolve the request
+    // (only the final plan frame does).
+    if (msg.type === "plan_delta") {
+      this.onPlanDelta?.(msg.seq, msg.delta);
       return;
     }
 

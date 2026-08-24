@@ -23,6 +23,53 @@ export class PlaceholderMap {
   get count(): number {
     return this.values.size;
   }
+
+  serialize(): string {
+    const data: Record<string, { value: string; kind: PiiKind }> = {};
+    for (const [ref, v] of this.values) {
+      data[ref] = v;
+    }
+    const counters: Record<string, number> = {};
+    for (const [kind, n] of this.counters) {
+      counters[kind] = n;
+    }
+    return JSON.stringify({ data, counters });
+  }
+
+  static deserialize(json: string): PlaceholderMap {
+    const map = new PlaceholderMap();
+    try {
+      const parsed = JSON.parse(json);
+      if (parsed.data) {
+        for (const [ref, v] of Object.entries(parsed.data)) {
+          const val = v as { value: string; kind: PiiKind };
+          map.values.set(ref, val);
+        }
+      }
+      if (parsed.counters) {
+        for (const [kind, n] of Object.entries(parsed.counters)) {
+          map.counters.set(kind as PiiKind, n as number);
+        }
+      }
+    } catch {
+      // Return empty map on parse failure
+    }
+    return map;
+  }
+
+  merge(other: PlaceholderMap): void {
+    for (const [ref, v] of other.values) {
+      if (!this.values.has(ref)) {
+        this.values.set(ref, v);
+      }
+    }
+    for (const [kind, n] of other.counters) {
+      const existing = this.counters.get(kind) ?? 0;
+      if (n > existing) {
+        this.counters.set(kind, n);
+      }
+    }
+  }
 }
 
 function luhnValid(digits: string): boolean {
@@ -50,7 +97,9 @@ interface Pattern {
 const PATTERNS: Pattern[] = [
   {
     kind: "api_key",
-    re: /\b(?:sk|gsk|pk_live|pk_test|api|AIza)[-_][A-Za-z0-9_-]{15,}/g,
+    // Prefixed vendor keys (sk-..., gsk_...) plus Google-style AIza keys,
+    // which carry NO separator between prefix and body.
+    re: /\b(?:(?:sk|gsk|pk_live|pk_test|api)[-_][A-Za-z0-9_-]{15,}|AIza[A-Za-z0-9_-]{20,})\b/g,
   },
   { kind: "email", re: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g },
   {
@@ -60,7 +109,17 @@ const PATTERNS: Pattern[] = [
   },
   { kind: "iban", re: /\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b/g },
   { kind: "ssn", re: /\b\d{3}-\d{2}-\d{4}\b/g },
-  { kind: "aadhaar", re: /\b\d{4}[ -]\d{4}[ -]\d{4}\b/g },
+  {
+    // Bank account identifiers written inline ("Account: 123456789",
+    // "acct no 0012345678"). Requires an explicit keyword + digit run so
+    // ordinary numbers never trip it.
+    kind: "other",
+    re: /\b(?:account|acct)\s*(?:no\.?|number|#)?\s*[:#-]?\s*\d{8,17}\b/gi,
+  },
+  {
+    kind: "aadhaar",
+    re: /(?<![\d][ -])\b\d{4}[ -]\d{4}[ -]\d{4}(?!\s?\d)/g,
+  },
   {
     kind: "phone",
     re: /(?<![\w])(?:[+(]?\d[\d\s().-]{6,17}\d)(?![\w])/g,
@@ -69,6 +128,9 @@ const PATTERNS: Pattern[] = [
       if (digits < 10 || digits > 13) return false;
       const groups = m.split(/[^\d]+/).filter(Boolean);
       if (groups.length === 4 && groups.every((g) => g.length <= 3)) return false;
+      // Long unseparated digit runs are ambiguous (order ids, tracking codes),
+      // not phone numbers.
+      if (groups.length === 1 && digits > 11) return false;
       return true;
     },
   },

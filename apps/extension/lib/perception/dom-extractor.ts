@@ -1,5 +1,6 @@
 import type { ElementNode, PiiKind, ScreenContext, ValueSlot } from "@pv/schema";
 import { PlaceholderMap, classifySensitiveField, scanText } from "../privacy/redactor";
+import { maskCuedNames } from "../privacy/ner";
 
 export interface ExtractOutput {
   screen: ScreenContext;
@@ -9,7 +10,7 @@ export interface ExtractOutput {
   timings: { extract_ms: number; redact_ms: number; serialize_ms: number };
 }
 
-const SELECTOR = [
+export const SELECTOR = [
   "a[href]",
   "button",
   "input",
@@ -142,15 +143,24 @@ function safeAttributes(el: HTMLElement): Record<string, string> {
   return attrs;
 }
 
-function guessFromContext(inp: HTMLInputElement | HTMLTextAreaElement, displayName: string): PiiKind | null {
-  const hints = `${inp.name} ${inp.id} ${displayName}`.toLowerCase();
+interface FieldLike {
+  name?: string | null;
+  id?: string;
+  value?: string;
+}
+
+export function guessFromContext(inp: FieldLike, displayName: string): PiiKind | null {
+  const hints = `${inp.name ?? ""} ${inp.id ?? ""} ${displayName}`.toLowerCase();
+  const val = inp.value ?? "";
   if (/password|passwd|passcode/.test(hints)) return "password";
   if (/e-?mail/.test(hints)) return "email";
   if (/\b(phone|mobile|tel)\b/.test(hints)) return "phone";
-  if (/\b(card|cc)[- ]?(no|number|num)?\b/.test(hints) && /\d/.test(inp.value)) return "card";
+  if (/\b(card|cc)[- ]?(no|number|num)?\b/.test(hints) && /\d/.test(val)) return "card";
   if (/\baadhaa?r\b/.test(hints)) return "aadhaar";
   if (/\bssn\b|social security/.test(hints)) return "ssn";
   if (/\b(cvv|cvc|security ?code)\b/.test(hints)) return "cvv";
+  if (/\baccount\b|\bacct\b/.test(hints)) return "other";
+  if (/\b(street|address|zip|postal)\b/.test(hints)) return "address";
   if (/\b(name|full ?name|first ?name|last ?name)\b/.test(hints)) return "person_name";
   return null;
 }
@@ -166,7 +176,9 @@ function inputSlot(
   const forced =
     classifySensitiveField(inp.tagName === "TEXTAREA" ? null : inp.type, inp.getAttribute("autocomplete")) ??
     guessFromContext(inp, displayName);
-  if (forced && !(inp instanceof HTMLTextAreaElement)) {
+  // Label-based redaction applies to textareas too (e.g. "Shipping Address") —
+  // an empty sensitive field is still a region the screenshot must hide.
+  if (forced) {
     return { kind: "redacted", ref: rt.register(raw, forced), pii: forced };
   }
 
@@ -213,15 +225,55 @@ function frameHash(payload: unknown): string {
   return h.toString(16);
 }
 
-export function extractAndRedact(): ExtractOutput {
+export function collectCandidates(
+  root: Document | Element | DocumentFragment | ShadowRoot,
+  selector: string = SELECTOR
+): HTMLElement[] {
+  const results: HTMLElement[] = [];
+  // Direct matches in this root
+  results.push(...Array.from(root.querySelectorAll<HTMLElement>(selector)));
+
+  // Traverse shadow roots
+  const allElements = root.querySelectorAll("*");
+  for (const el of Array.from(allElements)) {
+    if (el.shadowRoot) {
+      results.push(...collectCandidates(el.shadowRoot, selector));
+    }
+  }
+
+  return results;
+}
+
+export function collectFromIframes(doc: Document, selector: string = SELECTOR): HTMLElement[] {
+  const results: HTMLElement[] = [];
+  const iframes = doc.querySelectorAll("iframe");
+  for (const iframe of iframes) {
+    try {
+      const iframeDoc = iframe.contentDocument;
+      if (iframeDoc?.body) {
+        results.push(...collectCandidates(iframeDoc.body, selector));
+        // Recursively check nested iframes
+        results.push(...collectFromIframes(iframeDoc, selector));
+      }
+    } catch {
+      // Cross-origin iframe — can't access, skip silently
+    }
+  }
+  return results;
+}
+
+export function extractAndRedact(previousMap?: PlaceholderMap): ExtractOutput {
   const t0 = performance.now();
-  const map = new PlaceholderMap();
+  const map = previousMap ? (() => { const m = new PlaceholderMap(); m.merge(previousMap); return m; })() : new PlaceholderMap();
   const rt = new RedactTimer(map);
   const nodes = new Map<number, HTMLElement>();
   const elements: ElementNode[] = [];
   const sensitiveRects: ExtractOutput["sensitiveRects"] = [];
 
-  const candidates = Array.from(document.body.querySelectorAll<HTMLElement>(SELECTOR));
+  const candidates = [
+    ...collectCandidates(document.body, SELECTOR),
+    ...collectFromIframes(document, SELECTOR),
+  ];
 
   for (const el of candidates) {
     if (elements.length >= MAX_ELEMENTS) break;
@@ -234,9 +286,19 @@ export function extractAndRedact(): ExtractOutput {
 
     const role = roleOf(el);
     const rawName = accessibleName(el);
-    const nameBefore = rawName ? rt.scan(rawName) : "";
     rt.lastHits = 0;
-    const name = rawName ? nameBefore || null : null;
+    let name: string | null = null;
+    if (rawName) {
+      const scanned = rt.scan(rawName);
+      if (scanned) {
+        name = scanned;
+      } else {
+        // Regex patterns found nothing — fall back to greeting-cue person
+        // names ("Welcome back, John Doe") so visible names never leave.
+        const cued = maskCuedNames(rawName, (v, k) => rt.register(v, k));
+        name = cued;
+      }
+    }
 
     const vs = valueSlotFor(el, role, rt);
     const elementSensitive =

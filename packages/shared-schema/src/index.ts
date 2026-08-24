@@ -80,6 +80,10 @@ export const ScreenContext = z.object({
   pii_refs: z.array(PiiRef).max(200).default([]),
   redaction_count: z.number().int().nonnegative(),
   image_regions: z.array(ImageRegion).max(8).default([]),
+  screen_class: z.array(z.object({
+    label: z.string(),
+    score: z.number(),
+  })).max(5).optional(),
 });
 export type ScreenContext = z.infer<typeof ScreenContext>;
 
@@ -109,6 +113,7 @@ export const Timings = z.object({
   serialize_ms: z.number().nonnegative(),
   capture_ms: z.number().nonnegative().default(0),
   vision_ms: z.number().nonnegative().default(0),
+  classify_ms: z.number().nonnegative().default(0),
   rtt_ms: z.number().nullable().default(null),
 });
 export type Timings = z.infer<typeof Timings>;
@@ -129,6 +134,7 @@ export const PerceptionMsg = z.object({
   task: z.string().max(500),
   screen: ScreenContext,
   timings: Timings,
+  first_turn: z.boolean().optional().default(false),
 });
 
 export const ActionResultMsg = z.object({
@@ -174,12 +180,20 @@ export const ServerErrorMsg = z.object({
   message: z.string().max(500),
 });
 
+export const PlanDeltaMsg = z.object({
+  type: z.literal("plan_delta"),
+  seq: z.number().int().positive(),
+  delta: z.string().max(2000),
+});
+
 export const ServerMessage = z.discriminatedUnion("type", [
   WelcomeMsg,
   PlanMsg,
+  PlanDeltaMsg,
   ServerErrorMsg,
 ]);
 export type ServerMessage = z.infer<typeof ServerMessage>;
 export type WelcomeMsg = z.infer<typeof WelcomeMsg>;
 export type PlanMsg = z.infer<typeof PlanMsg>;
+export type PlanDeltaMsg = z.infer<typeof PlanDeltaMsg>;
 export type ServerErrorMsg = z.infer<typeof ServerErrorMsg>;

@@ -30,6 +30,7 @@ interface PopupSnapshot {
   socketStatus: SocketStatus;
   socketDetail: string;
   serverUrl: string;
+  hasAuthToken: boolean;
   taskRunning: boolean;
   currentTask: string;
   settings: AgentSettings;
@@ -43,6 +44,7 @@ interface AgentSettings {
   visionEnabled: boolean;
   blurFaces: boolean;
   nerEnabled: boolean;
+  ocrEnabled: boolean;
 }
 
 interface LastStats {
@@ -56,9 +58,10 @@ const DEFAULT_SETTINGS: AgentSettings = {
   visionEnabled: true,
   blurFaces: true,
   nerEnabled: false,
+  ocrEnabled: false,
 };
 
-const MAX_TURNS = 3;
+const MAX_TURNS = 5;
 const sock = new AgentSocket();
 
 let socketDetail = "";
@@ -79,6 +82,7 @@ async function loadSettings(): Promise<void> {
     visionEnabled: (stored.visionEnabled as boolean | undefined) ?? DEFAULT_SETTINGS.visionEnabled,
     blurFaces: (stored.blurFaces as boolean | undefined) ?? DEFAULT_SETTINGS.blurFaces,
     nerEnabled: (stored.nerEnabled as boolean | undefined) ?? DEFAULT_SETTINGS.nerEnabled,
+    ocrEnabled: (stored.ocrEnabled as boolean | undefined) ?? DEFAULT_SETTINGS.ocrEnabled,
   };
 }
 
@@ -104,6 +108,7 @@ function snapshot(): PopupSnapshot {
     socketStatus: sock.status,
     socketDetail,
     serverUrl: sock.currentUrl() || DEFAULT_SERVER_URL,
+    hasAuthToken: sock.hasToken(),
     taskRunning,
     currentTask,
     settings,
@@ -121,6 +126,9 @@ sock.onStatus = (s, detail) => {
 sock.onEvent = (e) => {
   if (e.kind === "server-error") log("error", "server", e.message);
   else log("warn", "socket", e.message);
+};
+sock.onPlanDelta = (seq, delta) => {
+  broadcast({ kind: "plan-delta", seq, delta });
 };
 
 export default defineBackground(() => {
@@ -161,13 +169,18 @@ export default defineBackground(() => {
   });
 
   browser.runtime.onMessage.addListener((msg: unknown) => {
-    const m = msg as { type?: string; task?: string; url?: string; key?: string; value?: boolean };
+    const m = msg as { type?: string; task?: string; url?: string; key?: string; value?: boolean | string };
     switch (m?.type) {
       case "GET_STATE":
         return Promise.resolve(snapshot());
       case "SET_SERVER_URL":
         return sock
           .setUrl(m.url ?? DEFAULT_SERVER_URL)
+          .then(() => ({ ok: true }))
+          .catch((e) => ({ ok: false, error: String(e) }));
+      case "SET_AUTH_TOKEN":
+        return sock
+          .setToken(typeof m.value === "string" ? m.value : "")
           .then(() => ({ ok: true }))
           .catch((e) => ({ ok: false, error: String(e) }));
       case "SET_SETTING":
@@ -207,14 +220,6 @@ interface ExtractResponse {
   screen?: ScreenContext;
   timings?: { extract_ms: number; redact_ms: number; serialize_ms: number };
   sensitiveRects?: SensitiveRect[];
-}
-
-interface ExtractResponse {
-  ok: boolean;
-  error?: string;
-  screen?: ScreenContext;
-  timings?: { extract_ms: number; redact_ms: number; serialize_ms: number };
-  sensitiveRects?: SensitiveRect[];
   dpr?: number;
 }
 
@@ -228,21 +233,35 @@ async function captureSanitizedScreen(
   sensitiveRects: SensitiveRect[],
   dpr: number,
   timings: Timings
-): Promise<{ region: ScreenContext["image_regions"][number] | null; faces: number }> {
+): Promise<{
+  region: ScreenContext["image_regions"][number] | null;
+  faces: number;
+  detectorAvailable: boolean;
+  ocrMasked: number;
+  ocrAvailable: boolean;
+  rawDataUrl: string;
+}> {
   const t0 = performance.now();
   const dataUrl = await browser.tabs.captureVisibleTab(tab.windowId!, { format: "jpeg", quality: 92 });
   timings.capture_ms = round1(performance.now() - t0);
 
   const t1 = performance.now();
   try {
-    const result = await redactScreenshot(dataUrl, sensitiveRects, dpr, settings.blurFaces);
+    const result = await redactScreenshot(dataUrl, sensitiveRects, dpr, settings.blurFaces, settings.ocrEnabled);
     timings.vision_ms = round1(performance.now() - t1);
     if (!result.region) throw new Error("canvas unavailable");
-    return { region: result.region, faces: result.facesBlurred };
+    return {
+      region: result.region,
+      faces: result.facesBlurred,
+      detectorAvailable: result.detectorAvailable,
+      ocrMasked: result.ocrMasked,
+      ocrAvailable: result.ocrAvailable,
+      rawDataUrl: dataUrl,
+    };
   } catch (e) {
     timings.vision_ms = round1(performance.now() - t1);
     log("warn", "vision", `screenshot sanitization failed: ${e instanceof Error ? e.message : e}`);
-    return { region: null, faces: 0 };
+    return { region: null, faces: 0, detectorAvailable: false, ocrMasked: 0, ocrAvailable: false, rawDataUrl: dataUrl };
   }
 }
 
@@ -252,11 +271,12 @@ async function runTask(task: string): Promise<void> {
   currentTask = task;
   broadcast({ kind: "task", running: true, task });
   const taskStart = performance.now();
+  let tabId: number | undefined;
 
   try {
     if (!task.trim()) throw new Error("empty task");
     const tab = await getActiveTab();
-    const tabId = tab.id!;
+    tabId = tab.id!;
     log("info", "agent", `starting task on tab ${tabId}`);
 
     await sock.ensure();
@@ -276,6 +296,7 @@ async function runTask(task: string): Promise<void> {
         serialize_ms: resp.timings?.serialize_ms ?? 0,
         capture_ms: 0,
         vision_ms: 0,
+        classify_ms: 0,
         rtt_ms: round1(wallMs),
       };
 
@@ -312,23 +333,45 @@ async function runTask(task: string): Promise<void> {
 
       if (settings.visionEnabled) {
         const dpr = resp.dpr ?? 1;
-        const { region, faces } = await captureSanitizedScreen(
-          tab,
-          resp.sensitiveRects ?? [],
-          dpr,
-          timings
-        );
+        const { region, faces, detectorAvailable, ocrMasked, ocrAvailable, rawDataUrl } =
+          await captureSanitizedScreen(tab, resp.sensitiveRects ?? [], dpr, timings);
         if (region) {
           screen.image_regions = [region];
           lastStats = lastStats ?? { elements: 0, redactions: 0, facesBlurred: 0, screenshotKb: 0 };
           lastStats.screenshotKb = Math.round((region.data_b64.length * 0.75) / 1024);
-          log(
-            "success",
-            "vision",
-            `screenshot sanitized locally — ${resp.sensitiveRects?.length ?? 0} PII box(es) blacked out, ${faces} face(s) ${settings.blurFaces ? "blurred" : "blacked out"}`,
-            round1(timings.capture_ms + timings.vision_ms)
-          );
+          const domBoxes = resp.sensitiveRects?.length ?? 0;
+          if (!detectorAvailable) {
+            log("warn", "vision", "face detector unavailable — DOM-derived blackouts still applied");
+          } else {
+            log(
+              "success",
+              "vision",
+              `on-device model read raw frame → ${faces} face(s) ${settings.blurFaces ? "blurred" : "blacked"}; ${domBoxes} DOM-derived box(es) blacked out`,
+              round1(timings.capture_ms + timings.vision_ms)
+            );
+          }
+          if (settings.ocrEnabled) {
+            if (ocrAvailable && ocrMasked > 0) {
+              log("success", "ocr", `OCR masked ${ocrMasked} sensitive text region(s) rendered in images/canvas`);
+            } else if (!ocrAvailable) {
+              log("warn", "ocr", "OCR engine unavailable in this context — toggle has no effect");
+            }
+          }
           lastStats.facesBlurred = faces;
+        }
+
+        // Run ViT screen classifier on raw screenshot
+        const t0class = performance.now();
+        try {
+          const { classifyScreen } = await import('@/lib/vision/screen-classifier');
+          const classifications = await classifyScreen(rawDataUrl);
+          if (classifications.length > 0) {
+            screen.screen_class = classifications;
+            timings.classify_ms = round1(performance.now() - t0class);
+            log('success', 'vit', `ViT classified screen: ${classifications[0].label} (${(classifications[0].score * 100).toFixed(1)}%)`, timings.classify_ms);
+          }
+        } catch (e) {
+          log('warn', 'vit', `screen classification skipped: ${e instanceof Error ? e.message : e}`);
         }
       }
 
@@ -338,7 +381,10 @@ async function runTask(task: string): Promise<void> {
       broadcast({ kind: "stats", stats: lastStats });
 
       const planStart = performance.now();
-      const answer = await sock.request({ type: "perception", task, screen, timings }, 30000);
+      const answer = await sock.request(
+        { type: "perception", task, screen, timings, first_turn: turn === 1 },
+        30000
+      );
       if (answer.type === "error") throw new Error(`${answer.code}: ${answer.message}`);
       if (answer.type !== "plan") throw new Error("unexpected server frame");
 
@@ -371,19 +417,33 @@ async function runTask(task: string): Promise<void> {
       const terminal = terminalIdx >= 0 ? actions[terminalIdx] : null;
       if (terminal && terminal.type === "done") {
         log("success", "done", terminal.summary, round1(performance.now() - taskStart));
+        void browser.tabs.sendMessage(tabId, { type: "CLEAR_MAP" }).catch(() => {});
         break;
       }
       if (terminal && terminal.type === "fail") {
         log("error", "done", `failed: ${terminal.reason}`, round1(performance.now() - taskStart));
+        void browser.tabs.sendMessage(tabId, { type: "CLEAR_MAP" }).catch(() => {});
         break;
       }
       if (turn === MAX_TURNS) log("warn", "agent", "max turns reached without completion");
     }
 
     log("info", "agent", `total wall time ${round1(performance.now() - taskStart)}ms`);
+    const perf = performance as Performance & { memory?: { usedJSHeapSize: number } };
+    const devMem = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+    if (perf.memory) {
+      log(
+        "info",
+        "perf",
+        `client footprint: SW heap ${round1(perf.memory.usedJSHeapSize / 1048576)}MB · device RAM ~${devMem ?? "?"}GB`
+      );
+    }
   } finally {
     taskRunning = false;
     currentTask = "";
     broadcast({ kind: "task", running: false, task: "" });
+    if (tabId !== undefined) {
+      void browser.tabs.sendMessage(tabId, { type: "CLEAR_MAP" }).catch(() => {});
+    }
   }
 }

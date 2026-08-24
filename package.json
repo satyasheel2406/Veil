@@ -14,9 +14,9 @@
     "test:ext": "npm run test --workspace @pv/extension",
     "test": "npm run test:ext && npm run test:server",
     "typecheck": "npm run typecheck --workspace @pv/schema && npm run typecheck --workspace @pv/extension",
-    "server:install": "python -m venv apps/server/.venv && apps/server/.venv/Scripts/python -m pip install -r apps/server/requirements.txt",
-    "server:dev": "apps/server/.venv/Scripts/python -m uvicorn app.main:app --reload --port 8765",
-    "test:server": "apps/server/.venv/Scripts/python -m pytest apps/server/tests -q"
+    "server:install": "node scripts/server.mjs install",
+    "server:dev": "node scripts/server.mjs dev",
+    "test:server": "node scripts/server.mjs test"
   },
   "engines": {
     "node": ">=20"

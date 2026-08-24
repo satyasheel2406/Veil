@@ -3,6 +3,7 @@ import json
 import logging
 import time
 import uuid
+from collections import deque
 from typing import Any
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -30,21 +31,50 @@ def _origin_ok(origin: str | None) -> bool:
     return any(origin.startswith(s) for s in ALLOWED_ORIGIN_SCHEMES)
 
 
+class RateLimiter:
+    """Sliding-window per-connection message cap; close 4008 on abuse."""
+
+    def __init__(self, max_msgs: int, window_s: float) -> None:
+        self.max_msgs = max_msgs
+        self.window_s = window_s
+        self._stamps: deque[float] = deque()
+
+    def allow(self) -> bool:
+        now = time.monotonic()
+        while self._stamps and now - self._stamps[0] > self.window_s:
+            self._stamps.popleft()
+        if len(self._stamps) >= self.max_msgs:
+            return False
+        self._stamps.append(now)
+        return True
+
+
 @router.websocket("/ws")
 async def ws_endpoint(ws: WebSocket) -> None:
     if not _origin_ok(ws.headers.get("origin")):
         await ws.close(code=4403)
         return
 
+    # Auth gate only when WS_AUTH_TOKEN is configured (opt-in).
+    expected_token = settings.ws_auth_token
+    if expected_token and ws.query_params.get("token") != expected_token:
+        await ws.accept()
+        await ws.close(code=4001, reason="unauthorized")
+        return
+
     await ws.accept()
     session_id = uuid.uuid4().hex[:12]
     provider = get_provider()
     orchestrator = Orchestrator(provider, max_actions=settings.max_actions_per_plan)
+    limiter = RateLimiter(settings.rate_limit_msgs, settings.rate_limit_window_s)
     hello: ClientHello | None = None
 
     try:
         while True:
             raw = await ws.receive_text()
+            if not limiter.allow():
+                await ws.close(code=4008, reason="rate limit exceeded")
+                return
             try:
                 msg: dict[str, Any] = json.loads(raw)
             except ValueError:
@@ -77,8 +107,13 @@ async def ws_endpoint(ws: WebSocket) -> None:
                     continue
                 try:
                     t0 = time.perf_counter()
+
+                    async def emit_delta(delta: str, _seq: int = pm.seq) -> None:
+                        await ws.send_json({"type": "plan_delta", "seq": _seq, "delta": delta})
+
                     plan = await asyncio.wait_for(
-                        orchestrator.plan(pm.task, pm.screen), timeout=settings.plan_timeout_s + 5
+                        orchestrator.plan(pm.task, pm.screen, on_delta=emit_delta, first_turn=pm.first_turn),
+                        timeout=settings.plan_timeout_s + 5,
                     )
                     total_ms = (time.perf_counter() - t0) * 1000
                     stats.record(

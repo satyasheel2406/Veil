@@ -116,10 +116,16 @@ async def probe(url: str, runs: int, budget_ms: float, check: bool) -> int:
                             "task": "Log in to my account",
                             "screen": _screen(i),
                             "timings": _timings(),
+                            "first_turn": True,
                         }
                     )
                 )
-                frame = json.loads(await ws.recv())
+                # Consume streaming thought deltas until the final plan arrives.
+                frame: dict[str, Any] = {}
+                while True:
+                    frame = json.loads(await ws.recv())
+                    if frame.get("type") != "plan_delta":
+                        break
                 total_ms = (loop.time() - t0) * 1000
 
                 if frame.get("type") != "plan":

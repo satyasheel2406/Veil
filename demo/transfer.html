@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Nebula Bank — Fund Transfer (Demo)</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Segoe UI", system-ui, sans-serif; }
+      body { background: linear-gradient(135deg, #0f172a, #1e1b4b); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+      .card { background: #fff; border-radius: 16px; padding: 32px; width: 100%; max-width: 480px; box-shadow: 0 25px 60px rgba(0,0,0,.45); }
+      .logo { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+      .logo-badge { width: 36px; height: 36px; border-radius: 10px; background: #4f46e5; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px; }
+      h1 { font-size: 20px; color: #0f172a; }
+      .sub { color: #64748b; font-size: 13px; margin-bottom: 24px; }
+      label { display: block; font-size: 12px; font-weight: 600; color: #334155; margin: 14px 0 6px; }
+      input, textarea { width: 100%; padding: 11px 14px; border: 1.5px solid #cbd5e1; border-radius: 10px; font-size: 14px; outline: none; transition: border-color .15s; }
+      textarea { resize: vertical; min-height: 80px; }
+      input:focus, textarea:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,.15); }
+      .amount-wrapper { position: relative; }
+      .amount-wrapper::before { content: "₹"; position: absolute; left: 14px; top: 11px; font-size: 14px; color: #334155; font-weight: 600; }
+      .amount-wrapper input { padding-left: 28px; }
+      button[type=submit] { width: 100%; margin-top: 22px; background: #4f46e5; color: #fff; border: 0; padding: 13px; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; transition: background .15s; }
+      button[type=submit]:hover { background: #4338ca; }
+      .link { text-align: center; font-size: 13px; color: #4f46e5; text-decoration: none; font-weight: 600; display: block; margin-top: 16px; }
+      .link:hover { text-decoration: underline; }
+      .seed { margin-top: 12px; width: 100%; background: #f1f5f9; color: #475569; border: 1px dashed #94a3b8; padding: 10px; border-radius: 10px; font-size: 12px; cursor: pointer; }
+      .banner { margin-top: 18px; background: #fef9c3; border: 1px solid #fde047; color: #854d0e; border-radius: 10px; padding: 10px 14px; font-size: 11.5px; line-height: 1.5; }
+      .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="logo">
+        <div class="logo-badge">N</div>
+        <h1>Nebula Bank — Fund Transfer</h1>
+      </div>
+      <p class="sub">Send money securely from your account</p>
+
+      <form id="transfer-form">
+        <label for="recipient-name">Recipient Name</label>
+        <input id="recipient-name" name="recipient-name" type="text" autocomplete="name" required />
+
+        <div class="grid-2">
+          <div>
+            <label for="account-number">Account Number</label>
+            <input id="account-number" name="account-number" type="text" autocomplete="off" required />
+          </div>
+          <div>
+            <label for="ifsc">IFSC Code</label>
+            <input id="ifsc" name="ifsc" type="text" required />
+          </div>
+        </div>
+
+        <label for="amount">Transfer Amount</label>
+        <div class="amount-wrapper">
+          <input id="amount" name="amount" type="number" min="1" step="1" required />
+        </div>
+
+        <label for="remark">Transfer Note / Remark</label>
+        <textarea id="remark" name="remark" placeholder="e.g., Rent payment"></textarea>
+
+        <label for="otp">One-Time Password (OTP)</label>
+        <input id="otp" name="otp" type="password" autocomplete="one-time-code" placeholder="6-digit code" required />
+
+        <button type="submit">Send Money</button>
+      </form>
+      
+      <a href="dashboard.html" class="link">Back to Dashboard</a>
+
+      <button class="seed" id="seed" type="button">Fill demo data (fictional PII for testing redaction)</button>
+
+      <div class="banner">
+        This is a local demo page for the SIH prototype. All data is fictional and never leaves this
+        page unless you submit the form.
+      </div>
+    </main>
+
+    <script>
+      document.getElementById("seed").addEventListener("click", () => {
+        document.getElementById("recipient-name").value = "Priya Sharma";
+        document.getElementById("account-number").value = "9876-5432-1098";
+        document.getElementById("ifsc").value = "HDFC0001234";
+        document.getElementById("amount").value = "5000";
+        document.getElementById("remark").value = "Rent payment for August";
+        document.getElementById("otp").value = "482931";
+      });
+
+      document.getElementById("transfer-form").addEventListener("submit", (e) => {
+        e.preventDefault();
+        window.location.href = "confirmation.html";
+      });
+    </script>
+  </body>
+</html>

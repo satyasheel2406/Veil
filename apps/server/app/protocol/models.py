@@ -59,6 +59,11 @@ class ScrollPos(BaseModel):
     y: float = 0
 
 
+class ScreenClassItem(BaseModel):
+    label: str
+    score: float
+
+
 class ScreenContext(BaseModel):
     url_skeleton: str
     title: str
@@ -69,6 +74,7 @@ class ScreenContext(BaseModel):
     pii_refs: list[PiiRef] = []
     redaction_count: int = 0
     image_regions: list[ImageRegion] = []
+    screen_class: list[ScreenClassItem] = []
 
 
 class ClickAction(BaseModel):
@@ -139,6 +145,7 @@ class Timings(BaseModel):
     serialize_ms: float = 0
     capture_ms: float = 0
     vision_ms: float = 0
+    classify_ms: float = 0
     rtt_ms: Optional[float] = None
 
 
@@ -155,6 +162,13 @@ class PerceptionMsg(BaseModel):
     task: str
     screen: ScreenContext
     timings: Timings = Timings()
+    first_turn: bool = False
+
+
+class PlanDeltaMsg(BaseModel):
+    type: Literal["plan_delta"]
+    seq: int
+    delta: str
 
 
 class ActionResultMsg(BaseModel):

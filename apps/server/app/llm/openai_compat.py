@@ -1,11 +1,11 @@
 import json
 import time
-from typing import Any
+from typing import Any, Optional
 
 import httpx
 
 from ..protocol.models import AgentAction, ScreenContext
-from .base import PlanResult
+from .base import DeltaCallback, PlanResult
 
 SYSTEM_PROMPT = """You are the reasoning core of a browser automation agent.
 The client browser sends you an ANONYMIZED description of the current web page:
@@ -53,6 +53,28 @@ class ProviderError(RuntimeError):
     pass
 
 
+def _images_unsupported(err: str) -> bool:
+    low = err.lower()
+    return any(
+        k in low
+        for k in (
+            "image",
+            "vision",
+            "multimodal",
+            "content part",
+            "does not support",
+            "not supported",
+        )
+    )
+
+
+def _stream_unsupported(err: str) -> bool:
+    low = err.lower()
+    return "stream" in low and any(
+        k in low for k in ("not support", "unsupport", "invalid", "reject", "disallow")
+    )
+
+
 class OpenAICompatProvider:
     def __init__(self, name: str, base_url: str, model: str, api_key: str, timeout_s: float = 20.0):
         self.name = name
@@ -61,19 +83,63 @@ class OpenAICompatProvider:
         self.api_key = api_key
         self.timeout_s = timeout_s
 
-    async def plan(self, task: str, screen: ScreenContext) -> PlanResult:
+    async def plan(
+        self,
+        task: str,
+        screen: ScreenContext,
+        history: Optional[list[dict]] = None,
+        on_delta: Optional[DeltaCallback] = None,
+    ) -> PlanResult:
+        try:
+            return await self._plan_once(task, screen, with_images=True, history=history, on_delta=on_delta)
+        except ProviderError as e:
+            if not _images_unsupported(str(e)) or not screen.image_regions:
+                raise
+            # Model rejected the image parts — retry text-only; screenshots stay local.
+            return await self._plan_once(task, screen, with_images=False, history=history)
+
+    def _history_context(self, history: Optional[list[dict]]) -> dict[str, Any] | None:
+        """Compact multi-turn memory: what pages were seen and what was already done."""
+        if not history:
+            return None
+        compact = [
+            {
+                "turn": h.get("turn"),
+                "page_title": (h.get("page_title") or "")[:80],
+                "actions_taken": h.get("actions_taken", []),
+            }
+            for h in history[-4:]
+        ]
+        return {"recent_turns": compact}
+
+    async def _plan_once(
+        self,
+        task: str,
+        screen: ScreenContext,
+        *,
+        with_images: bool,
+        history: Optional[list[dict]] = None,
+        on_delta: Optional[DeltaCallback] = None,
+    ) -> PlanResult:
+        from ..core.config import settings as _settings
+
+        payload_screen = screen.model_dump(mode="json", exclude={"image_regions"})
+        hist_ctx = self._history_context(history)
+        if hist_ctx:
+            payload_screen["recent_history"] = hist_ctx
         screen_json = json.dumps(
-            {"task": task, "screen": screen.model_dump(mode="json", exclude={"image_regions"})},
+            {"task": task, "screen": payload_screen},
             separators=(",", ":"),
         )
         content: list[dict[str, Any]] = [{"type": "text", "text": screen_json}]
-        for region in screen.image_regions[:4]:
-            content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:{region.mime};base64,{region.data_b64}"},
-                }
-            )
+        if with_images and _settings.llm_vision:
+            for region in screen.image_regions[:4]:
+                content.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{region.mime};base64,{region.data_b64}"},
+                    }
+                )
 
         payload: dict[str, Any] = {
             "model": self.model,
@@ -89,18 +155,24 @@ class OpenAICompatProvider:
         t0 = time.perf_counter()
         try:
             async with httpx.AsyncClient(timeout=self.timeout_s) as client:
-                resp = await client.post(f"{self.base_url}/chat/completions", json=payload, headers=headers)
-                resp.raise_for_status()
-                body = resp.json()
+                if on_delta is not None:
+                    try:
+                        body_text = await self._stream_completion(client, payload, headers, on_delta)
+                    except ProviderError as e:
+                        if not _stream_unsupported(str(e)):
+                            raise
+                        payload.pop("stream", None)
+                        body_text = await self._plain_completion(client, payload, headers)
+                else:
+                    body_text = await self._plain_completion(client, payload, headers)
         except httpx.HTTPStatusError as e:
             raise ProviderError(f"{self.name} HTTP {e.response.status_code}: {e.response.text[:300]}") from e
         except (httpx.HTTPError, ValueError) as e:
             raise ProviderError(f"{self.name} request failed: {e}") from e
 
         usage_ms = (time.perf_counter() - t0) * 1000
-        content = body.get("choices", [{}])[0].get("message", {}).get("content", "")
         try:
-            parsed = json.loads(content)
+            parsed = json.loads(body_text)
             thought = str(parsed.get("thought", ""))[:2000]
             raw_actions = parsed.get("actions", [])
             actions: list[AgentAction] = []
@@ -110,6 +182,51 @@ class OpenAICompatProvider:
             return _typed_plan(thought, actions, self.describe(), usage_ms)
         except (ValueError, TypeError) as e:
             raise ProviderError(f"{self.name} returned malformed plan JSON: {e}") from e
+
+    async def _plain_completion(
+        self,
+        client: httpx.AsyncClient,
+        payload: dict[str, Any],
+        headers: dict[str, str],
+    ) -> str:
+        resp = await client.post(f"{self.base_url}/chat/completions", json=payload, headers=headers)
+        resp.raise_for_status()
+        return resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+
+    async def _stream_completion(
+        self,
+        client: httpx.AsyncClient,
+        payload: dict[str, Any],
+        headers: dict[str, str],
+        on_delta: DeltaCallback,
+    ) -> str:
+        """SSE streaming; every content token is forwarded via on_delta as it arrives."""
+        payload = {**payload, "stream": True}
+        collected: list[str] = []
+        async with client.stream(
+            "POST", f"{self.base_url}/chat/completions", json=payload, headers=headers
+        ) as resp:
+            if resp.status_code >= 400:
+                raw = (await resp.aread()).decode("utf-8", "replace")
+                raise ProviderError(f"{self.name} HTTP {resp.status_code}: {raw[:300]}")
+            async for line in resp.aiter_lines():
+                if not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if not data:
+                    continue
+                if data == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data)
+                except ValueError:
+                    continue
+                choices = chunk.get("choices") or [{}]
+                piece = ((choices[0].get("delta") or {}).get("content")) or ""
+                if piece:
+                    collected.append(piece)
+                    await on_delta(piece)
+        return "".join(collected)
 
     def describe(self) -> str:
         return f"{self.name}:{self.model}"

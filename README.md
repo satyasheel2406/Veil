@@ -32,7 +32,7 @@ never exists outside the machine, yet multi-step workflows still complete.
 |---|---|---|---|
 | 1 · Structural regex | emails, phones (+digit-count validation), cards (**Luhn-verified**), SSN/Aadhaar/IBAN, API keys — in field names, values, titles | content script | ~1–3 ms |
 | 2 · Entity masking | person-name runs in text values (`[PERSON_NAME_101]…`) | background | <1 ms |
-| 3 · Pixel redaction | element rects → black boxes; faces → blur (or black); exported WebP q0.72 | background OffscreenCanvas + BlazeFace (230 KB model, GPU→CPU fallback) | ~30–80 ms |
+| 3 · Pixel redaction (vision-first) | **BlazeFace reads the RAW frame before anything else** and its detections decide extra redaction regions — catching faces inside `<img>/<canvas>/<video>` that DOM inspection cannot see; then element rects → black boxes, faces → blur/black; WebP q0.72 | background OffscreenCanvas + BlazeFace (230 KB model, GPU→CPU fallback) | ~30–80 ms |
 | 4 · Prompt-injection guard | instruction-override / role-hijack / placeholder-exfiltration patterns + zero-width steganography → `[INJECTION_BLOCKED]`; flagged in popup log & plan thought | client `lib/security` **and** mirrored server-side (`app/security/injection.py`) before any LLM sees the payload | <1 ms |
 
 Sensitive-value detection also uses form semantics: `type=password`, `autocomplete`
@@ -152,9 +152,11 @@ Current status against SIH criteria:
 
 | Metric | Target | Current |
 |---|---|---|
-| PII detection precision / recall | ≥85% / ≥90% | **100% / 100%** (21-sample seed corpus — grows each phase) |
-| Client package size | minimal | 12.1 MB total; content script **12 kB**, background **208 kB** (rest is lazily-loaded face-detection wasm) |
-| E2E demo latency | p50 ≤3.5 s | **p50 = 3 ms** client round-trip on echo (probe: 20/20 runs PASS); live per-stage budget bars in popup |
+| Visual context accuracy (M1) | qualitative+quantitative | DOM element graph with roles/names/rects; on-device BlazeFace reads raw frames and drives redaction decisions (vision-first) |
+| PII detection precision / recall (M2) | ≥85% / ≥90% | **100% / 100%** — 21-sample text corpus + 4 labeled screen layouts |
+| Precision of redaction (M3) | box-level IoU | **P=100%, R=100%, matched-IoU=1.000** across `eval/fixtures/layouts.json` (incl. decoy labels); greedy IoU@0.5 matching in vitest |
+| Client package size / runtime (M4) | minimal | 12.1 MB total; content script **12 kB**, background **209 kB**; per-task SW-heap + device-RAM logged in popup (`perf` line) |
+| E2E demo latency (M5) | p50 ≤3.5 s | echo: **p50 = 3 ms** (probe, 20/20 PASS); live VLM (openrouter/free): ~8 s planner — trade-off documented, budget panel shows both |
 
 Golden tasks (`apps/server/tests/test_golden_tasks.py`) lock plan quality end-to-end:
 login fill→fill→click→done, signup multi-field mapping, prompt-injection resilience
@@ -195,11 +197,28 @@ With the `vllm` profile, point the gateway at it via
 `LLM_PROVIDER=vllm LLM_MODEL=local-planner LLM_BASE_URL=http://vllm:8000/v1`.
 The demo page mounts at `/demo`, health at `/health`, rolling latency stats at `/stats`.
 
+### Securing the gateway (production)
+
+- **Auth token** — set `WS_AUTH_TOKEN=<secret>` on the server; connections without a
+  matching `?token=` are closed `4001`. Enter the same token in the popup
+  ("auth token: none → configure"). Leave it empty in local dev to disable the gate.
+- **Rate limiting** — per-connection sliding window (`RATE_LIMIT_MSGS` per
+  `RATE_LIMIT_WINDOW_S`, default 60/10s); floods are closed with `4008`.
+- **TLS / WSS** — terminate TLS at your reverse proxy, or run uvicorn with
+  `--ssl-keyfile/--ssl-certfile` (mkcert for dev) and switch the popup URL to `wss://…`.
+
 ## Protocol
 
-Client → server frames: `hello {caps}`, `perception {task, screen, timings}`,
+Client → server frames: `hello {caps}`, `perception {task, screen, timings, first_turn}`,
 `action_result`. Server → client frames: `welcome {provider, model}`,
-`plan {thought, actions[], model}`, `error {code, message}`.
+`plan_delta {seq, delta}` (streamed thought tokens), `plan {thought, actions[], model}`,
+`error {code, message}`.
+
+`first_turn: true` marks the first perception of a new task on a persistent connection —
+the orchestrator clears its multi-turn memory so recycled element ids from a previous
+task can never be skipped or replayed. Providers receive a compact history
+(last turns' page titles + action types) enabling multi-page flows:
+dashboard → transfer form (refs + amount literal) → confirmation → done.
 
 `screen.elements[i] = {id, role, tag, name, value, editable, rect, in_viewport, attributes}` —
 sensitive values become `{kind:"redacted", ref:"[KIND_n]", pii}` and `pii_refs` enumerates
@@ -219,8 +238,14 @@ plans exceeding the action cap.
 - [x] Phase 3 — vision layer: screenshot capture, pixel blackouts, BlazeFace blur, VLM images
 - [x] Phase 4b — prompt-injection guards (client + server + system prompt), golden-task suite
 - [x] Phase 5 — latency probe + /stats endpoint, popup budget panel, golden-task QA
-      (transformer NER via offscreen document deferred — WXT IIFE entrypoint bundling
-      blocks lazy model chunks today)
-- [x] Phase 5 — latency probe + /stats endpoint, popup budget panel
 - [x] Phase 6 — docker-compose deploy (gateway image + optional vLLM profile); store builds
       and pitch deck remain for submission week
+- [x] Phase 7 — ML perception (Transformers.js ViT screen classifier + DistilBERT NER),
+      shadow-DOM/same-origin iframe traversal, PlaceholderMap persistence across pages,
+      multi-page golden flows (dashboard→transfer→confirmation), multi-turn orchestrator
+      memory with `first_turn` reset
+- [x] Phase 8 — OCR text masking (tesseract.js, opt-in toggle, lazy CDN assets, graceful
+      SW degradation), WS auth token + rate limiter + WSS docs, streaming `plan_delta`
+      thought frames end-to-end (provider SSE → gateway → popup "thinking" card),
+      account-number & address field detection, greeting-cue name masking
+      (eval: P=100% R=100% IoU=1.000 over 8 layouts)

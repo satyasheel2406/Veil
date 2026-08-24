@@ -14,6 +14,7 @@ interface AgentSettings {
   visionEnabled: boolean;
   blurFaces: boolean;
   nerEnabled: boolean;
+  ocrEnabled: boolean;
 }
 
 interface LastStats {
@@ -50,6 +51,7 @@ interface Snapshot {
   socketStatus: string;
   socketDetail: string;
   serverUrl: string;
+  hasAuthToken?: boolean;
   taskRunning: boolean;
   currentTask: string;
   settings: AgentSettings;
@@ -97,6 +99,9 @@ export default function App() {
   const [task, setTask] = useState("");
   const [serverUrl, setServerUrl] = useState("");
   const [editingUrl, setEditingUrl] = useState(false);
+  const [editingToken, setEditingToken] = useState(false);
+  const [tokenDraft, setTokenDraft] = useState("");
+  const [streamingThought, setStreamingThought] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -115,7 +120,10 @@ export default function App() {
         setSnap((prev) =>
           prev ? { ...prev, socketStatus: msg.status, socketDetail: msg.detail ?? "" } : prev
         );
+      } else if (msg.kind === "plan-delta") {
+        setStreamingThought((prev) => (prev + (msg.delta as string)).slice(-1200));
       } else if (msg.kind === "plan") {
+        setStreamingThought("");
         setSnap((prev) => (prev ? { ...prev, lastPlan: msg.plan as PlanMsg } : prev));
       } else if (msg.kind === "stats") {
         setSnap((prev) => (prev ? { ...prev, lastStats: msg.stats as LastStats } : prev));
@@ -124,6 +132,7 @@ export default function App() {
       } else if (msg.kind === "settings") {
         setSnap((prev) => (prev ? { ...prev, settings: msg.settings as AgentSettings } : prev));
       } else if (msg.kind === "task") {
+        if (msg.running) setStreamingThought("");
         setSnap((prev) =>
           prev ? { ...prev, taskRunning: msg.running, currentTask: msg.task } : prev
         );
@@ -149,6 +158,11 @@ export default function App() {
   const saveUrl = async () => {
     await browser.runtime.sendMessage({ type: "SET_SERVER_URL", url: serverUrl });
     setEditingUrl(false);
+  };
+  const saveToken = async () => {
+    await browser.runtime.sendMessage({ type: "SET_AUTH_TOKEN", value: tokenDraft });
+    setTokenDraft("");
+    setEditingToken(false);
   };
   const setSetting = (key: string, value: boolean) =>
     browser.runtime.sendMessage({ type: "SET_SETTING", key, value });
@@ -228,6 +242,31 @@ export default function App() {
           className="truncate rounded-md bg-slate-900 px-2 py-1 text-left text-[10px] text-slate-500 hover:text-slate-300"
         >
           server: {serverUrl || "not set"}
+        </button>
+      )}
+
+      {editingToken ? (
+        <div className="flex gap-1.5">
+          <input
+            type="password"
+            value={tokenDraft}
+            onChange={(e) => setTokenDraft(e.target.value)}
+            className="flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs outline-none focus:border-indigo-500"
+            placeholder="WS auth token (blank = none)"
+          />
+          <button
+            onClick={saveToken}
+            className="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-medium hover:bg-indigo-500"
+          >
+            Save
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setEditingToken(true)}
+          className="rounded-md bg-slate-900 px-2 py-1 text-left text-[10px] text-slate-600 hover:text-slate-300"
+        >
+          auth token: {snap?.hasAuthToken ? "configured" : "none"}
         </button>
       )}
 
@@ -325,6 +364,12 @@ export default function App() {
           k="nerEnabled"
           checked={snap?.settings.nerEnabled}
         />
+        <Toggle
+          label="OCR text masking"
+          hint="blacks out PII rendered inside images/canvas (experimental)"
+          k="ocrEnabled"
+          checked={snap?.settings.ocrEnabled}
+        />
       </div>
 
       <textarea
@@ -351,6 +396,18 @@ export default function App() {
           Stop
         </button>
       </div>
+
+      {snap?.taskRunning && streamingThought && (
+        <section className="rounded-lg border border-indigo-800/60 bg-indigo-950/40 p-2.5">
+          <p className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-indigo-300">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400" />
+            thinking
+          </p>
+          <p className="line-clamp-4 whitespace-pre-wrap font-mono text-[10px] leading-snug text-slate-400">
+            {streamingThought}
+          </p>
+        </section>
+      )}
 
       {snap?.lastPlan && (
         <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">

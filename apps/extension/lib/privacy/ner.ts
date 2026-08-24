@@ -68,6 +68,37 @@ function dedupe(hits: NerHit[]): NerHit[] {
   });
 }
 
+// Greeting/address cues that precede the user's name in page text
+// ("Welcome back, John Doe", "Logged in as Jane Doe", "Dear John Doe,").
+const NAME_CUE_RE =
+  /\b(?:welcome back|welcome|logged[ -]?in as|signed[ -]?in as|my name is|i am|dear)\b[:,]?\s+((?:[A-Z][a-z'’-]+)(?:\s+[A-Z][a-z'’-]+){0,3})/gi;
+
+export function cuedNameHits(text: string): NerHit[] {
+  const hits: NerHit[] = [];
+  NAME_CUE_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = NAME_CUE_RE.exec(text)) !== null) {
+    const candidate = m[1].trim();
+    const words = candidate.split(/\s+/);
+    if (words.length >= 2 && words.length <= 4) {
+      hits.push({ text: candidate, kind: "person_name" });
+    }
+  }
+  return dedupe(hits);
+}
+
+/** Replace cued person names with placeholder refs. Returns null when untouched. */
+export function maskCuedNames(text: string, register: (value: string, kind: PiiKind) => string): string | null {
+  const hits = cuedNameHits(text);
+  if (hits.length === 0) return null;
+  let out = text;
+  for (const h of [...hits].sort((a, b) => b.text.length - a.text.length)) {
+    if (!out.includes(h.text)) continue;
+    out = out.split(h.text).join(register(h.text, h.kind));
+  }
+  return out === text ? null : out;
+}
+
 export interface NerResult {
   screen: ScreenContext;
   maskedCount: number;
@@ -79,9 +110,17 @@ export async function nerEnrichScreen(screen: ScreenContext): Promise<NerResult>
 
   const piiRefs: PiiRef[] = [...screen.pii_refs];
 
-  const scrubElement = (el: ElementNode): void => {
+  const { detectEntitiesML } = await import("./ml-ner");
+
+  const scrubElement = async (el: ElementNode): Promise<void> => {
     if (el.value?.kind !== "text") return;
-    const hits = heuristicNameHits(el.value.text);
+    
+    let hits = await detectEntitiesML(el.value.text);
+    if (hits.length === 0) {
+       // Fallback to heuristic if ML found nothing (or hasn't loaded)
+       hits = heuristicNameHits(el.value.text).map(h => ({ ...h, score: 1.0 }));
+    }
+
     let text = el.value.text;
     for (const h of [...hits].sort((a, b) => b.text.length - a.text.length)) {
       if (!text.includes(h.text)) continue;
@@ -94,7 +133,7 @@ export async function nerEnrichScreen(screen: ScreenContext): Promise<NerResult>
   };
 
   for (const el of screen.elements) {
-    scrubElement(el);
+    await scrubElement(el);
   }
 
   return {

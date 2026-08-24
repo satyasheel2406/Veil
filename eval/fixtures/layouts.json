@@ -1,0 +1,128 @@
+{
+  "comment": "Layout fixtures for redaction-precision (IoU) evaluation. Each element mirrors what the DOM extractor sees; ground_truth.pii_boxes lists the rects that MUST be redacted. Decoy fields are intentionally tricky labels that must NOT be flagged.",
+  "layouts": [
+    {
+      "name": "bank-login",
+      "viewport": { "w": 1280, "h": 800 },
+      "elements": [
+        { "id": 0, "role": "heading", "tag": "h1", "name": "Sign in to Nebula Bank", "value_text": null, "editable": false, "rect": { "x": 100, "y": 80, "w": 300, "h": 36 }, "attributes": {} },
+        { "id": 1, "role": "textbox", "tag": "input", "name": "Email address", "value_text": "", "editable": true, "rect": { "x": 100, "y": 200, "w": 300, "h": 32 }, "attributes": { "type": "email" } },
+        { "id": 2, "role": "textbox", "tag": "input", "name": "Password", "value_text": "", "editable": true, "rect": { "x": 100, "y": 240, "w": 300, "h": 32 }, "attributes": { "type": "password" } },
+        { "id": 3, "role": "checkbox", "tag": "input", "name": "Save card on file for faster checkout", "value_text": "unchecked", "editable": false, "rect": { "x": 100, "y": 284, "w": 16, "h": 16 }, "attributes": { "type": "checkbox" } },
+        { "id": 4, "role": "button", "tag": "button", "name": "Sign in", "value_text": null, "editable": false, "rect": { "x": 100, "y": 310, "w": 140, "h": 36 }, "attributes": {} }
+      ],
+      "ground_truth": [
+        { "x": 100, "y": 200, "w": 300, "h": 32 },
+        { "x": 100, "y": 240, "w": 300, "h": 32 }
+      ]
+    },
+    {
+      "name": "checkout-payment",
+      "viewport": { "w": 1280, "h": 900 },
+      "elements": [
+        { "id": 0, "role": "heading", "tag": "h2", "name": "Payment details", "value_text": null, "editable": false, "rect": { "x": 60, "y": 60, "w": 220, "h": 30 }, "attributes": {} },
+        { "id": 1, "role": "textbox", "tag": "input", "name": "Card number", "value_text": "", "editable": true, "rect": { "x": 60, "y": 120, "w": 260, "h": 32 }, "attributes": { "type": "text", "autocomplete": "cc-number" } },
+        { "id": 2, "role": "textbox", "tag": "input", "name": "CVV", "value_text": "", "editable": true, "rect": { "x": 330, "y": 120, "w": 70, "h": 32 }, "attributes": { "type": "tel" } },
+        { "id": 3, "role": "textbox", "tag": "input", "name": "Phone number for receipts", "value_text": "", "editable": true, "rect": { "x": 60, "y": 162, "w": 200, "h": 32 }, "attributes": { "autocomplete": "tel" } },
+        { "id": 4, "role": "textbox", "tag": "input", "name": "Billing search reference", "value_text": "", "editable": true, "rect": { "x": 60, "y": 204, "w": 200, "h": 32 }, "attributes": { "type": "search" } },
+        { "id": 5, "role": "button", "tag": "button", "name": "Pay now", "value_text": null, "editable": false, "rect": { "x": 60, "y": 250, "w": 120, "h": 38 }, "attributes": {} }
+      ],
+      "ground_truth": [
+        { "x": 60, "y": 120, "w": 260, "h": 32 },
+        { "x": 330, "y": 120, "w": 70, "h": 32 },
+        { "x": 60, "y": 162, "w": 200, "h": 32 }
+      ]
+    },
+    {
+      "name": "social-profile-bio",
+      "viewport": { "w": 1280, "h": 800 },
+      "elements": [
+        { "id": 0, "role": "heading", "tag": "h1", "name": "Rahul Sharma", "value_text": null, "editable": false, "rect": { "x": 40, "y": 40, "w": 240, "h": 34 }, "attributes": {} },
+        { "id": 1, "role": "textbox", "tag": "textarea", "name": "Bio", "value_text": "Hi, I am Rahul from Pune. Reach me at rahul.sharma@example.com anytime.", "editable": true, "rect": { "x": 40, "y": 90, "w": 420, "h": 96 }, "attributes": {} },
+        { "id": 2, "role": "textbox", "tag": "input", "name": "City", "value_text": "Pune", "editable": true, "rect": { "x": 40, "y": 196, "w": 160, "h": 30 }, "attributes": {} },
+        { "id": 3, "role": "button", "tag": "button", "name": "Save profile", "value_text": null, "editable": false, "rect": { "x": 40, "y": 236, "w": 130, "h": 34 }, "attributes": {} }
+      ],
+      "ground_truth": [
+        { "x": 40, "y": 90, "w": 420, "h": 96 }
+      ]
+    },
+    {
+      "name": "support-chat",
+      "viewport": { "w": 1280, "h": 800 },
+      "elements": [
+        { "id": 0, "role": "generic", "tag": "div", "name": "Agent Priya Nair joined the chat", "value_text": null, "editable": false, "rect": { "x": 20, "y": 20, "w": 380, "h": 24 }, "attributes": {} },
+        { "id": 1, "role": "textbox", "tag": "input", "name": "Message", "value_text": "My number is +91 98765 43210, please call back", "editable": true, "rect": { "x": 20, "y": 700, "w": 480, "h": 34 }, "attributes": {} },
+        { "id": 2, "role": "generic", "tag": "div", "name": "Order #ORD-778899 shipped", "value_text": null, "editable": false, "rect": { "x": 20, "y": 60, "w": 300, "h": 22 }, "attributes": {} },
+        { "id": 3, "role": "button", "tag": "button", "name": "Send", "value_text": null, "editable": false, "rect": { "x": 510, "y": 700, "w": 80, "h": 34 }, "attributes": {} }
+      ],
+      "ground_truth": [
+        { "x": 20, "y": 700, "w": 480, "h": 34 }
+      ]
+    },
+    {
+      "name": "dashboard",
+      "viewport": { "w": 1280, "h": 800 },
+      "elements": [
+        { "id": 0, "role": "heading", "tag": "h1", "name": "Dashboard", "value_text": null, "editable": false, "rect": { "x": 40, "y": 40, "w": 240, "h": 34 }, "attributes": {} },
+        { "id": 1, "role": "generic", "tag": "div", "name": "Welcome back, John Doe", "value_text": null, "editable": false, "rect": { "x": 40, "y": 90, "w": 420, "h": 24 }, "attributes": {} },
+        { "id": 2, "role": "generic", "tag": "div", "name": "Account: 123456789", "value_text": null, "editable": false, "rect": { "x": 40, "y": 120, "w": 200, "h": 24 }, "attributes": {} },
+        { "id": 3, "role": "generic", "tag": "div", "name": "Email: john.doe@example.com", "value_text": null, "editable": false, "rect": { "x": 40, "y": 150, "w": 200, "h": 24 }, "attributes": {} },
+        { "id": 4, "role": "generic", "tag": "div", "name": "Phone: +1 555-123-4567", "value_text": null, "editable": false, "rect": { "x": 40, "y": 180, "w": 200, "h": 24 }, "attributes": {} }
+      ],
+      "ground_truth": [
+        { "x": 40, "y": 90, "w": 420, "h": 24 },
+        { "x": 40, "y": 120, "w": 200, "h": 24 },
+        { "x": 40, "y": 150, "w": 200, "h": 24 },
+        { "x": 40, "y": 180, "w": 200, "h": 24 }
+      ]
+    },
+    {
+      "name": "transfer-form",
+      "viewport": { "w": 1280, "h": 800 },
+      "elements": [
+        { "id": 0, "role": "heading", "tag": "h2", "name": "Transfer Funds", "value_text": null, "editable": false, "rect": { "x": 100, "y": 80, "w": 300, "h": 36 }, "attributes": {} },
+        { "id": 1, "role": "textbox", "tag": "input", "name": "Recipient Name", "value_text": "", "editable": true, "rect": { "x": 100, "y": 200, "w": 300, "h": 32 }, "attributes": { "type": "text" } },
+        { "id": 2, "role": "textbox", "tag": "input", "name": "Account Number", "value_text": "", "editable": true, "rect": { "x": 100, "y": 240, "w": 300, "h": 32 }, "attributes": { "type": "text" } },
+        { "id": 3, "role": "textbox", "tag": "input", "name": "Amount", "value_text": "", "editable": true, "rect": { "x": 100, "y": 280, "w": 300, "h": 32 }, "attributes": { "type": "number" } },
+        { "id": 4, "role": "button", "tag": "button", "name": "Transfer", "value_text": null, "editable": false, "rect": { "x": 100, "y": 320, "w": 140, "h": 36 }, "attributes": {} }
+      ],
+      "ground_truth": [
+        { "x": 100, "y": 200, "w": 300, "h": 32 },
+        { "x": 100, "y": 240, "w": 300, "h": 32 }
+      ]
+    },
+    {
+      "name": "checkout-page",
+      "viewport": { "w": 1280, "h": 900 },
+      "elements": [
+        { "id": 0, "role": "heading", "tag": "h2", "name": "Checkout", "value_text": null, "editable": false, "rect": { "x": 60, "y": 60, "w": 220, "h": 30 }, "attributes": {} },
+        { "id": 1, "role": "textbox", "tag": "input", "name": "Card number", "value_text": "", "editable": true, "rect": { "x": 60, "y": 120, "w": 260, "h": 32 }, "attributes": { "type": "text", "autocomplete": "cc-number" } },
+        { "id": 2, "role": "textbox", "tag": "input", "name": "Email", "value_text": "", "editable": true, "rect": { "x": 60, "y": 160, "w": 260, "h": 32 }, "attributes": { "type": "email" } },
+        { "id": 3, "role": "textbox", "tag": "textarea", "name": "Shipping Address", "value_text": "", "editable": true, "rect": { "x": 60, "y": 200, "w": 260, "h": 60 }, "attributes": {} },
+        { "id": 4, "role": "button", "tag": "button", "name": "Place Order", "value_text": null, "editable": false, "rect": { "x": 60, "y": 280, "w": 120, "h": 38 }, "attributes": {} }
+      ],
+      "ground_truth": [
+        { "x": 60, "y": 120, "w": 260, "h": 32 },
+        { "x": 60, "y": 160, "w": 260, "h": 32 },
+        { "x": 60, "y": 200, "w": 260, "h": 60 }
+      ]
+    },
+    {
+      "name": "profile-settings",
+      "viewport": { "w": 1280, "h": 800 },
+      "elements": [
+        { "id": 0, "role": "heading", "tag": "h1", "name": "Profile Settings", "value_text": null, "editable": false, "rect": { "x": 40, "y": 40, "w": 240, "h": 34 }, "attributes": {} },
+        { "id": 1, "role": "image", "tag": "img", "name": "Avatar of Jane Doe", "value_text": null, "editable": false, "rect": { "x": 40, "y": 90, "w": 100, "h": 100 }, "attributes": {} },
+        { "id": 2, "role": "textbox", "tag": "input", "name": "Full Name", "value_text": "Jane Doe", "editable": true, "rect": { "x": 160, "y": 90, "w": 300, "h": 32 }, "attributes": { "type": "text" } },
+        { "id": 3, "role": "textbox", "tag": "input", "name": "Email Address", "value_text": "jane.doe@example.com", "editable": true, "rect": { "x": 160, "y": 130, "w": 300, "h": 32 }, "attributes": { "type": "email" } },
+        { "id": 4, "role": "textbox", "tag": "input", "name": "Phone Number", "value_text": "+1 555-987-6543", "editable": true, "rect": { "x": 160, "y": 170, "w": 300, "h": 32 }, "attributes": { "type": "tel" } },
+        { "id": 5, "role": "button", "tag": "button", "name": "Update Profile", "value_text": null, "editable": false, "rect": { "x": 160, "y": 210, "w": 130, "h": 34 }, "attributes": {} }
+      ],
+      "ground_truth": [
+        { "x": 160, "y": 90, "w": 300, "h": 32 },
+        { "x": 160, "y": 130, "w": 300, "h": 32 },
+        { "x": 160, "y": 170, "w": 300, "h": 32 }
+      ]
+    }
+  ]
+}
