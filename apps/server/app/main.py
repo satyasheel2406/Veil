@@ -10,8 +10,17 @@ from .gateway.ws import router as ws_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-DEMO_DIR = REPO_ROOT / "demo"
+def _find_repo_root() -> Path | None:
+    # Works both in the repo (apps/server/app/main.py) and in the container
+    # (/srv/app/main.py) — locate by marker instead of fixed depth.
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "demo").is_dir():
+            return parent
+    return None
+
+
+REPO_ROOT = _find_repo_root()
+DEMO_DIR = REPO_ROOT / "demo" if REPO_ROOT else None
 
 
 def create_app() -> FastAPI:
@@ -26,7 +35,7 @@ def create_app() -> FastAPI:
     async def stats_endpoint() -> dict:
         return {"ok": True, **stats.summary()}
 
-    if DEMO_DIR.exists():
+    if DEMO_DIR is not None and DEMO_DIR.exists():
         app.mount("/demo", StaticFiles(directory=str(DEMO_DIR), html=True), name="demo")
 
     return app
