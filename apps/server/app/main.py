@@ -42,7 +42,7 @@ def create_app() -> FastAPI:
             },
         }
 
-    @app.get("/health")
+    @app.get("/health", methods=["GET", "HEAD"])
     async def health() -> dict:
         return {"ok": True, "provider": settings.llm_provider}
 
