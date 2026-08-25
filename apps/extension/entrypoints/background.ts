@@ -1,6 +1,6 @@
 import { browser } from "wxt/browser";
 import { defineBackground } from "wxt/utils/define-background";
-import type { AgentAction, PlanMsg, ScreenContext, Timings } from "@pv/schema";
+import type { AgentAction, PlanMsg, PrivacyAudit, ScreenContext, Timings } from "@pv/schema";
 import { AgentSocket, DEFAULT_SERVER_URL, type SocketStatus } from "@/lib/ws-client";
 import { redactScreenshot, type SensitiveRect } from "@/lib/vision/screenshot";
 import { nerEnrichScreen } from "@/lib/privacy/ner";
@@ -24,6 +24,11 @@ interface LastStats {
   redactions: number;
   facesBlurred: number;
   screenshotKb: number;
+  piiByKind: Record<string, number>;
+  piiByMethod: Record<string, number>;
+  redactionLayers: PrivacyAudit["redaction_layers"];
+  sensitiveElements: number;
+  screenshotRawKb: number;
 }
 
 interface PopupSnapshot {
@@ -47,13 +52,6 @@ interface AgentSettings {
   ocrEnabled: boolean;
 }
 
-interface LastStats {
-  elements: number;
-  redactions: number;
-  facesBlurred: number;
-  screenshotKb: number;
-}
-
 const DEFAULT_SETTINGS: AgentSettings = {
   visionEnabled: true,
   blurFaces: true,
@@ -71,6 +69,7 @@ let lastPlan: PlanMsg | null = null;
 let lastStats: LastStats | null = null;
 let lastTimings: Timings | null = null;
 let settings: AgentSettings = { ...DEFAULT_SETTINGS };
+let lastRawScreenshotKb = 0;
 const logRing: LogEntry[] = [];
 const popupPorts = new Set<RuntimePort>();
 
@@ -290,10 +289,12 @@ async function captureSanitizedScreen(
   ocrMasked: number;
   ocrAvailable: boolean;
   rawDataUrl: string;
+  rawScreenshotKb: number;
 }> {
   const t0 = performance.now();
   const dataUrl = await browser.tabs.captureVisibleTab(tab.windowId!, { format: "jpeg", quality: 92 });
   timings.capture_ms = round1(performance.now() - t0);
+  const rawKb = Math.round((dataUrl.length * 0.75) / 1024);
 
   const t1 = performance.now();
   try {
@@ -308,11 +309,12 @@ async function captureSanitizedScreen(
       ocrMasked: result.ocrMasked,
       ocrAvailable: result.ocrAvailable,
       rawDataUrl: dataUrl,
+      rawScreenshotKb: rawKb,
     };
   } catch (e) {
     timings.vision_ms = round1(performance.now() - t1);
     log("warn", "vision", `screenshot sanitization failed: ${e instanceof Error ? e.message : e}`);
-    return { region: null, faces: 0, detectorAvailable: false, detectorError: e instanceof Error ? e.message : String(e), ocrMasked: 0, ocrAvailable: false, rawDataUrl: dataUrl };
+    return { region: null, faces: 0, detectorAvailable: false, detectorError: e instanceof Error ? e.message : String(e), ocrMasked: 0, ocrAvailable: false, rawDataUrl: dataUrl, rawScreenshotKb: rawKb };
   }
 }
 
@@ -353,9 +355,40 @@ async function runTask(task: string): Promise<void> {
 
       let screen: ScreenContext = resp.screen!;
 
+      const piiByKind: Record<string, number> = {};
+      const piiByMethod: Record<string, number> = {};
+      const redactionLayers: PrivacyAudit["redaction_layers"] = {
+        dom_redact: 0,
+        regex_scan: 0,
+        ner_mask: 0,
+        face_blur: 0,
+        ocr_mask: 0,
+        dom_blackout: 0,
+        injection_guard: 0,
+        server_redact: 0,
+      };
+
+      for (const ref of screen.pii_refs) {
+        piiByKind[ref.kind] = (piiByKind[ref.kind] ?? 0) + 1;
+        if (ref.kind === "person_name") {
+          piiByMethod["ner_heuristic"] = (piiByMethod["ner_heuristic"] ?? 0) + 1;
+        } else if (["password", "email", "phone", "card", "cvv", "ssn", "aadhaar", "iban", "address", "dob", "api_key"].includes(ref.kind)) {
+          piiByMethod["dom_context"] = (piiByMethod["dom_context"] ?? 0) + 1;
+        } else {
+          piiByMethod["regex"] = (piiByMethod["regex"] ?? 0) + 1;
+        }
+      }
+
+      const sensitiveElements = screen.elements.filter(
+        (e) => e.value?.kind === "redacted"
+      ).length;
+      redactionLayers.dom_redact = sensitiveElements;
+      redactionLayers.regex_scan = screen.redaction_count;
+
       const guard = sanitizeScreen(screen);
       screen = guard.screen;
       if (guard.hits > 0) {
+        redactionLayers.injection_guard = guard.hits;
         log(
           "warn",
           "guard",
@@ -374,6 +407,10 @@ async function runTask(task: string): Promise<void> {
         const t0 = performance.now();
         const enriched = await nerEnrichScreen(screen);
         screen = enriched.screen;
+        if (enriched.maskedCount > 0) {
+          piiByMethod["ner_heuristic"] = (piiByMethod["ner_heuristic"] ?? 0) + enriched.maskedCount;
+          redactionLayers.ner_mask = enriched.maskedCount;
+        }
         log(
           enriched.maskedCount > 0 ? "success" : "info",
           "ner",
@@ -384,13 +421,22 @@ async function runTask(task: string): Promise<void> {
 
       if (settings.visionEnabled) {
         const dpr = resp.dpr ?? 1;
-        const { region, faces, detectorAvailable, detectorError, ocrMasked, ocrAvailable, rawDataUrl } =
+        const { region, faces, detectorAvailable, detectorError, ocrMasked, ocrAvailable, rawDataUrl, rawScreenshotKb } =
           await captureSanitizedScreen(tab, resp.sensitiveRects ?? [], dpr, timings);
+        lastRawScreenshotKb = rawScreenshotKb;
         if (region) {
           screen.image_regions = [region];
-          lastStats = lastStats ?? { elements: 0, redactions: 0, facesBlurred: 0, screenshotKb: 0 };
+          lastStats = lastStats ?? {
+            elements: 0, redactions: 0, facesBlurred: 0, screenshotKb: 0,
+            piiByKind: {}, piiByMethod: {}, redactionLayers: {
+              dom_redact: 0, regex_scan: 0, ner_mask: 0, face_blur: 0, ocr_mask: 0, dom_blackout: 0, injection_guard: 0, server_redact: 0,
+            }, sensitiveElements: 0, screenshotRawKb: 0,
+          };
           lastStats.screenshotKb = Math.round((region.data_b64.length * 0.75) / 1024);
+          lastStats.screenshotRawKb = rawScreenshotKb;
           const domBoxes = resp.sensitiveRects?.length ?? 0;
+          redactionLayers.dom_blackout = domBoxes;
+          redactionLayers.face_blur = faces;
           if (!detectorAvailable) {
             log(
               "warn",
@@ -408,6 +454,7 @@ async function runTask(task: string): Promise<void> {
           if (!settings.ocrEnabled) {
             log("info", "ocr", "OCR disabled — enable 'OCR text masking' to scan text rendered in images");
           } else if (ocrAvailable && ocrMasked > 0) {
+            redactionLayers.ocr_mask = ocrMasked;
             log("success", "ocr", `OCR masked ${ocrMasked} sensitive text region(s) rendered in images/canvas`);
           } else if (ocrAvailable) {
             log("info", "ocr", "OCR ran — no sensitive text found in rendered images");
@@ -433,9 +480,18 @@ async function runTask(task: string): Promise<void> {
         }
       }
 
-      lastStats = lastStats ?? { elements: 0, redactions: 0, facesBlurred: 0, screenshotKb: 0 };
+      lastStats = lastStats ?? {
+        elements: 0, redactions: 0, facesBlurred: 0, screenshotKb: 0,
+        piiByKind: {}, piiByMethod: {}, redactionLayers: {
+          dom_redact: 0, regex_scan: 0, ner_mask: 0, face_blur: 0, ocr_mask: 0, dom_blackout: 0, injection_guard: 0, server_redact: 0,
+        }, sensitiveElements: 0, screenshotRawKb: 0,
+      };
       lastStats.elements = screen.elements.length;
       lastStats.redactions = screen.redaction_count;
+      lastStats.piiByKind = piiByKind;
+      lastStats.piiByMethod = piiByMethod;
+      lastStats.redactionLayers = redactionLayers;
+      lastStats.sensitiveElements = sensitiveElements;
       broadcast({ kind: "stats", stats: lastStats });
 
       const planStart = performance.now();

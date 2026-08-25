@@ -40,7 +40,7 @@ export const ValueSlot = z.discriminatedUnion("kind", [
 ]);
 export type ValueSlot = z.infer<typeof ValueSlot>;
 
-const SAFE_ATTR_KEYS = ["type", "autocomplete", "required", "checked", "selected"] as const;
+const SAFE_ATTR_KEYS = ["type", "autocomplete", "required", "checked", "selected", "disabled", "aria-required", "aria-live", "aria-invalid", "tabindex", "title", "aria-describedby"] as const;
 
 export const ElementNode = z.object({
   id: z.number().int().nonnegative(),
@@ -117,6 +117,32 @@ export const Timings = z.object({
   rtt_ms: z.number().nullable().default(null),
 });
 export type Timings = z.infer<typeof Timings>;
+
+export const PiiDetection = z.object({
+  kind: PiiKind,
+  method: z.enum(["regex", "dom_context", "autocomplete", "ner_heuristic", "ner_ml", "ocr"]),
+  count: z.number().int().nonnegative(),
+});
+export type PiiDetection = z.infer<typeof PiiDetection>;
+
+export const PrivacyAudit = z.object({
+  detections: z.array(PiiDetection).default([]),
+  redaction_layers: z.object({
+    dom_redact: z.number().int().nonnegative().default(0),
+    regex_scan: z.number().int().nonnegative().default(0),
+    ner_mask: z.number().int().nonnegative().default(0),
+    face_blur: z.number().int().nonnegative().default(0),
+    ocr_mask: z.number().int().nonnegative().default(0),
+    dom_blackout: z.number().int().nonnegative().default(0),
+    injection_guard: z.number().int().nonnegative().default(0),
+    server_redact: z.number().int().nonnegative().default(0),
+  }).default({}),
+  screenshot_before_kb: z.number().nonnegative().default(0),
+  screenshot_after_kb: z.number().nonnegative().default(0),
+  total_elements_scanned: z.number().int().nonnegative().default(0),
+  sensitive_elements_found: z.number().int().nonnegative().default(0),
+});
+export type PrivacyAudit = z.infer<typeof PrivacyAudit>;
 
 export const ClientHello = z.object({
   type: z.literal("hello"),

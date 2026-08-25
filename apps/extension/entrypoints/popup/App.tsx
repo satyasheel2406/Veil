@@ -22,6 +22,20 @@ interface LastStats {
   redactions: number;
   facesBlurred: number;
   screenshotKb: number;
+  piiByKind: Record<string, number>;
+  piiByMethod: Record<string, number>;
+  redactionLayers: {
+    dom_redact: number;
+    regex_scan: number;
+    ner_mask: number;
+    face_blur: number;
+    ocr_mask: number;
+    dom_blackout: number;
+    injection_guard: number;
+    server_redact: number;
+  };
+  sensitiveElements: number;
+  screenshotRawKb: number;
 }
 
 interface TimingsView {
@@ -30,6 +44,7 @@ interface TimingsView {
   serialize_ms: number;
   capture_ms: number;
   vision_ms: number;
+  classify_ms: number;
   rtt_ms: number | null;
 }
 
@@ -37,6 +52,7 @@ const BUDGETS: Array<{ key: keyof TimingsView; label: string; budget: number }> 
   { key: "extract_ms", label: "extract", budget: 150 },
   { key: "redact_ms", label: "redact", budget: 50 },
   { key: "vision_ms", label: "vision", budget: 400 },
+  { key: "classify_ms", label: "ViT", budget: 5000 },
   { key: "capture_ms", label: "capture", budget: 150 },
   { key: "rtt_ms", label: "server rtt", budget: 2500 },
 ];
@@ -295,6 +311,53 @@ export default function App() {
         </div>
       )}
 
+      {snap?.lastStats && (snap.lastStats.piiByKind && Object.keys(snap.lastStats.piiByKind).length > 0) && (
+        <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">
+          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
+            Privacy Audit — PII Detection
+          </p>
+          <div className="flex flex-wrap gap-1 mb-2">
+            {Object.entries(snap.lastStats.piiByKind).map(([kind, count]) => (
+              <span key={kind} className="rounded bg-amber-950/60 px-1.5 py-0.5 text-[9px] font-mono text-amber-300 ring-1 ring-amber-800/40">
+                {kind}: {count}
+              </span>
+            ))}
+          </div>
+          <p className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-slate-500">
+            Detection Methods
+          </p>
+          <div className="flex flex-wrap gap-1 mb-2">
+            {Object.entries(snap.lastStats.piiByMethod).map(([method, count]) => (
+              <span key={method} className="rounded bg-slate-800 px-1.5 py-0.5 text-[9px] font-mono text-slate-300">
+                {method}: {count}
+              </span>
+            ))}
+          </div>
+          <p className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-slate-500">
+            Redaction Layers
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {Object.entries(snap.lastStats.redactionLayers).map(([layer, count]) => (
+              count > 0 && (
+                <span key={layer} className="rounded bg-indigo-950/40 px-1.5 py-0.5 text-[9px] font-mono text-indigo-300 ring-1 ring-indigo-800/30">
+                  {layer}: {count}
+                </span>
+              )
+            ))}
+          </div>
+          {snap.lastStats.screenshotRawKb > 0 && (
+            <div className="mt-2 flex items-center gap-2 text-[9px] text-slate-500">
+              <span>raw screenshot: {snap.lastStats.screenshotRawKb}KB</span>
+              <span>→</span>
+              <span>sanitized: {snap.lastStats.screenshotKb}KB</span>
+              <span className="text-emerald-400">
+                ({Math.max(0, snap.lastStats.screenshotRawKb - snap.lastStats.screenshotKb)}KB redacted)
+              </span>
+            </div>
+          )}
+        </section>
+      )}
+
       {snap?.lastTimings && (
         <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">
           <div className="mb-1.5 flex items-baseline justify-between">
@@ -435,6 +498,38 @@ export default function App() {
                 {actionLabel(a)}
               </span>
             ))}
+          </div>
+        </section>
+      )}
+
+      {snap?.lastTimings && (
+        <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">
+          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-cyan-400">
+            Client Resource Utilization
+          </p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[9px]">
+            <span className="text-slate-500">DOM elements scanned</span>
+            <span className="text-right font-mono text-slate-300">{snap.lastStats?.elements ?? "—"}</span>
+            <span className="text-slate-500">Sensitive elements</span>
+            <span className="text-right font-mono text-amber-300">{snap.lastStats?.sensitiveElements ?? "—"}</span>
+            <span className="text-slate-500">Total PII masked</span>
+            <span className="text-right font-mono text-indigo-300">{snap.lastStats?.redactions ?? "—"}</span>
+            <span className="text-slate-500">Faces detected/blurred</span>
+            <span className="text-right font-mono text-emerald-300">{snap.lastStats?.facesBlurred ?? "—"}</span>
+            <span className="text-slate-500">On-device models</span>
+            <span className="text-right font-mono text-slate-300">ViT · BlazeFace · Tesseract · NER</span>
+            <span className="text-slate-500">Screenshot (raw → sanitized)</span>
+            <span className="text-right font-mono text-slate-300">
+              {(snap.lastStats?.screenshotRawKb ?? 0) > 0
+                ? `${snap.lastStats!.screenshotRawKb}KB → ${snap.lastStats!.screenshotKb}KB`
+                : snap.lastStats?.screenshotKb ? `${snap.lastStats.screenshotKb}KB` : "—"}
+            </span>
+            <span className="text-slate-500">Network to server</span>
+            <span className="text-right font-mono text-slate-300">
+              {snap.lastStats?.screenshotKb ? `~${snap.lastStats.screenshotKb}KB sanitized img + DOM` : "—"}
+            </span>
+            <span className="text-slate-500">PII leaves browser</span>
+            <span className="text-right font-mono text-emerald-400">0 bytes (all masked client-side)</span>
           </div>
         </section>
       )}

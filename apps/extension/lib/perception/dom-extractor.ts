@@ -140,6 +140,27 @@ function safeAttributes(el: HTMLElement): Record<string, string> {
   const ac = el.getAttribute("autocomplete");
   if (ac) attrs.autocomplete = ac;
   if ("required" in el && (el as HTMLInputElement).required) attrs.required = "true";
+  if (el instanceof HTMLInputElement && el.disabled) attrs.disabled = "true";
+  const ariaReq = el.getAttribute("aria-required");
+  if (ariaReq) attrs["aria-required"] = ariaReq;
+  const ariaLive = el.getAttribute("aria-live");
+  if (ariaLive) attrs["aria-live"] = ariaLive;
+  const ariaInvalid = el.getAttribute("aria-invalid");
+  if (ariaInvalid) attrs["aria-invalid"] = ariaInvalid;
+  const tabindex = el.getAttribute("tabindex");
+  if (tabindex) attrs.tabindex = tabindex;
+  const title = el.getAttribute("title");
+  if (title) attrs.title = title.slice(0, 80);
+  const describedby = el.getAttribute("aria-describedby");
+  if (describedby) {
+    const descParts = describedby.split(/\s+/).map(id => document.getElementById(id)?.textContent?.trim() ?? "").filter(Boolean);
+    if (descParts.length > 0) attrs["aria-describedby"] = descParts.join(" ").slice(0, 120);
+  }
+  const labelledby = el.getAttribute("aria-labelledby");
+  if (labelledby && !attrs["aria-describedby"]) {
+    const lblParts = labelledby.split(/\s+/).map(id => document.getElementById(id)?.textContent?.trim() ?? "").filter(Boolean);
+    if (lblParts.length > 0) attrs["aria-describedby"] = lblParts.join(" ").slice(0, 120);
+  }
   return attrs;
 }
 
