@@ -421,7 +421,7 @@ async function runTask(task: string): Promise<void> {
         const t0class = performance.now();
         try {
           const { classifyScreen } = await import('@/lib/vision/screen-classifier');
-          log('info', 'vit', 'loading screen classifier (first run may download ~90MB)…');
+          log('info', 'vit', 'loading screen classifier (self-hosted)…');
           const classifications = await classifyScreen(rawDataUrl);
           if (classifications.length > 0) {
             screen.screen_class = classifications;

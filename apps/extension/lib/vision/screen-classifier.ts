@@ -5,16 +5,16 @@ export interface ScreenClassification {
   score: number;
 }
 
-// Nothing in the vision path may ever stall an agent turn indefinitely.
+const extUrl = (p: string): string =>
+  (browser.runtime.getURL as unknown as (path: string) => string)(p);
+
 const INIT_TIMEOUT_MS = 90_000;
 const INFER_TIMEOUT_MS = 45_000;
 
 let classifierInstance: any = null;
-let isInitializing = false;
-let initPromise: Promise<void> | null = null;
 let permanentlyUnavailable = false;
 let announcedFailure = false;
-let lastError = "";
+let lastError = '';
 
 function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
   return Promise.race([
@@ -25,42 +25,42 @@ function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
   ]);
 }
 
+async function prefetchAllFiles(): Promise<void> {
+  const files = ['config.json', 'preprocessor_config.json', 'onnx/model_quantized.onnx'];
+  await Promise.all(
+    files.map((f) => fetch(extUrl(`models/vit-base-patch16-224/${f}`)).then((r) => r.blob()))
+  );
+}
+
 async function initClassifier(): Promise<void> {
   if (classifierInstance || permanentlyUnavailable) return;
-  if (isInitializing && initPromise) {
-    await initPromise;
-    return;
-  }
 
-  isInitializing = true;
-  initPromise = (async () => {
+  try {
+    await withTimeout(prefetchAllFiles(), 15_000, 'model file prefetch');
+    classifierInstance = await withTimeout(
+      pipeline('image-classification', extUrl('models/vit-base-patch16-224'), { device: 'wasm' }),
+      INIT_TIMEOUT_MS,
+      'ViT model load'
+    );
+  } catch (_e) {
     try {
-      // wasm only: WebGPU in MV3 service workers is flaky and has been
-      // observed hanging mid-inference with no error surfaced.
       classifierInstance = await withTimeout(
         pipeline('image-classification', 'Xenova/vit-base-patch16-224', { device: 'wasm' }),
         INIT_TIMEOUT_MS,
-        'ViT model load'
+        'ViT model load (fallback)'
       );
-    } catch (e) {
+    } catch (e2) {
       permanentlyUnavailable = true;
-      lastError = e instanceof Error ? e.message : String(e);
+      lastError = e2 instanceof Error ? e2.message : String(e2);
     }
-  })();
-
-  try {
-    await initPromise;
-  } finally {
-    isInitializing = false;
   }
 }
 
 export async function classifyScreen(imageDataUrl: string): Promise<ScreenClassification[]> {
   if (permanentlyUnavailable) {
-    // Surface the failure exactly once (the caller logs it); stay silent after.
     if (!announcedFailure) {
       announcedFailure = true;
-      throw new Error(lastError || "screen classifier unavailable");
+      throw new Error(lastError || 'screen classifier unavailable');
     }
     return [];
   }

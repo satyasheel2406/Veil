@@ -94,7 +94,7 @@ infra/                     docker-compose deployment
 
 ## Live Demo
 
-The gateway is live at **https://veil-agent.online** (Cloudflare Named Tunnel → localhost:8765).
+The gateway is live at **https://veil-agent.online** (Render free tier, always-on).
 
 ```
 wss://veil-agent.online/ws          ← extension connects here
@@ -102,11 +102,9 @@ https://veil-agent.online/health    ← liveness probe
 https://veil-agent.online/demo/     ← demo pages (login, dashboard, transfer, faces)
 ```
 
-The server runs on the developer's machine behind a persistent `cloudflared` tunnel — no hosting costs, no cloud VM. When the tunnel is down the domain is unreachable; when it's up, the extension works from any network.
+The server runs on Render's free tier with auto-deploy from the `main` branch. An UptimeRobot monitor pings `/health` every 5 minutes to prevent spin-down.
 
-### Subdomains
-
-You can use any subdomain of `veil-agent.online` for other projects — just add a CNAME or A record in Cloudflare DNS. Cloudflare provides free universal SSL for all subdomains.
+Backup direct URL: https://veil-gateway.onrender.com
 
 ## Quickstart
 
@@ -227,33 +225,31 @@ must never be guessed or reconstructed.
 
 ## Deployment
 
-### Cloudflare Named Tunnel (current production)
+### Render (current production)
 
-The gateway is exposed via a persistent Cloudflare Named Tunnel at `veil-agent.online`.
-This gives HTTPS + WSS with zero hosting cost — traffic flows: Cloudflare edge →
-`cloudflared` on the developer's machine → `localhost:8765`.
+The gateway is deployed on Render's free tier with auto-deploy from the `main` branch.
+Domain `veil-agent.online` points to Render via CNAME (Hostinger DNS). Render provides
+free SSL for custom domains. An UptimeRobot monitor prevents free-tier spin-down.
 
-```powershell
-# start the tunnel (runs in background)
-Start-Process cmd.exe -ArgumentList "/c `"C:\Users\SATYAS~1\AppData\Local\Temp\opencode\cloudflared.exe`" tunnel run veil"
+**Environment variables** (set in Render dashboard):
+
+```env
+LLM_PROVIDER=openrouter
+LLM_MODEL=nvidia/nemotron-3-super-120b-a12b:free
+LLM_API_KEY=sk-or-v1-...
+WS_AUTH_TOKEN=<secret>
+RATE_LIMIT_MSGS=60
+RATE_LIMIT_WINDOW_S=10
+LLM_VISION=true
 ```
 
-Tunnel config lives at `~/.cloudflared/config.yml`:
-```yaml
-tunnel: f38af03f-ec8c-4d10-9714-84b96cb2e8f9
-credentials-file: C:\Users\Satyasheel Raman\.cloudflared\f38af03f-ec8c-4d10-9714-84b96cb2e8f9.json
-ingress:
-  - hostname: veil-agent.online
-    service: http://localhost:8765
-  - service: http_status:404
-```
+**Render settings:**
+- Dockerfile: `infra/Dockerfile`
+- Build context: repo root
+- Compute: Free (512 MB RAM, 0.1 CPU)
+- Region: Oregon (US West) or Singapore
 
-Domain: `veil-agent.online` (purchased, nameservers → Cloudflare).
-DNS route: CNAME `veil-agent.online` → `<tunnel-id>.cfargotunnel.com` (via `cloudflared tunnel route dns`).
-
-**Limitation:** the tunnel only works while the developer's machine is on and `cloudflared` is running. For always-on hosting, use Docker + a cloud VM (below).
-
-### Docker Compose
+### Docker Compose (local dev)
 
 `infra/docker-compose.yml` ships the gateway as a container:
 
@@ -275,9 +271,8 @@ The demo page mounts at `/demo`, health at `/health`, rolling latency stats at `
   ("auth token: none → configure"). Leave it empty in local dev to disable the gate.
 - **Rate limiting** — per-connection sliding window (`RATE_LIMIT_MSGS` per
   `RATE_LIMIT_WINDOW_S`, default 60/10s); floods are closed with `4008`.
-- **TLS / WSS** — Cloudflare tunnel handles TLS termination automatically.
-  For self-hosted deployments, run uvicorn with `--ssl-keyfile/--ssl-certfile`
-  (mkcert for dev) or place behind a reverse proxy.
+- **TLS / WSS** — Render auto-provisions SSL for custom domains. For self-hosted
+  deployments, run uvicorn with `--ssl-keyfile/--ssl-certfile` or place behind a reverse proxy.
 
 ## Protocol
 
