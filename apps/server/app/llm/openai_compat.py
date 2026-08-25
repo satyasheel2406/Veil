@@ -19,9 +19,10 @@ The client browser sends you an ANONYMIZED description of the current web page:
 
 Your job: decide the next best sequence of actions to accomplish the user's task.
 
-Respond with STRICT JSON only (no markdown, no prose) matching:
+IMPORTANT: You MUST respond with ONLY a JSON object. No prose, no explanation, no markdown.
+The ENTIRE response must be a single valid JSON object matching this schema:
 {
-  "thought": "short reasoning",
+  "thought": "short reasoning about what to do next",
   "actions": [
     {"type":"click","target":<element id>},
     {"type":"fill","target":<element id>,"ref":"[EMAIL_1]"} ,
@@ -206,17 +207,33 @@ class OpenAICompatProvider:
         usage_ms = (time.perf_counter() - t0) * 1000
         try:
             parsed = json.loads(body_text)
-            thought = str(parsed.get("thought", ""))[:2000]
-            raw_actions = parsed.get("actions", [])
-            actions: list[AgentAction] = []
-            for a in raw_actions[:10]:
-                if isinstance(a, dict) and "type" in a:
-                    actions.append(a)
-            return _typed_plan(thought, actions, self.describe(), usage_ms)
-        except (ValueError, TypeError) as e:
-            raise ProviderError(
-                f"{self.name} returned malformed plan JSON: {e}; got: {body_text[:200]!r}"
-            ) from e
+        except (ValueError, TypeError):
+            # Free models sometimes ignore response_format and return prose.
+            # Try to extract a JSON object from the text.
+            m = re.search(r"\{[\s\S]*\}", body_text)
+            if m:
+                try:
+                    parsed = json.loads(m.group())
+                except (ValueError, TypeError):
+                    raise ProviderError(
+                        f"{self.name} returned malformed plan JSON; got: {body_text[:200]!r}"
+                    )
+            else:
+                # Model returned pure prose — treat as a fail action so the
+                # agent can surface the model's reasoning instead of crashing.
+                return _typed_plan(
+                    thought=body_text[:2000],
+                    raw_actions=[{"type": "fail", "reason": body_text[:300]}],
+                    model=self.describe(),
+                    usage_ms=usage_ms,
+                )
+        thought = str(parsed.get("thought", ""))[:2000]
+        raw_actions = parsed.get("actions", [])
+        actions: list[AgentAction] = []
+        for a in raw_actions[:10]:
+            if isinstance(a, dict) and "type" in a:
+                actions.append(a)
+        return _typed_plan(thought, actions, self.describe(), usage_ms)
 
     async def _plain_completion(
         self,
