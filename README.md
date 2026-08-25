@@ -5,6 +5,8 @@ every sensitive value **on-device** (in structure *and* in pixels), and sends on
 anonymized data to the server for LLM reasoning. The server orchestrates actions
 (click / fill / scroll) that the extension executes — without ever seeing your actual data.
 
+**Live:** https://veil-agent.online · **Extension:** Chrome MV3 + Firefox MV2
+
 ```
 ┌────────────────────────────── BROWSER ─────────────────────────────┐      ┌────────────────── SERVER ──────────────────┐
 │  content script (per tab)                                          │      │  FastAPI gateway (WebSocket /ws)           │
@@ -89,6 +91,22 @@ demo/                      login.html, dashboard.html, transfer.html, confirmati
 eval/                      layout corpus + latency probe (plan_delta-aware)
 infra/                     docker-compose deployment
 ```
+
+## Live Demo
+
+The gateway is live at **https://veil-agent.online** (Cloudflare Named Tunnel → localhost:8765).
+
+```
+wss://veil-agent.online/ws          ← extension connects here
+https://veil-agent.online/health    ← liveness probe
+https://veil-agent.online/demo/     ← demo pages (login, dashboard, transfer, faces)
+```
+
+The server runs on the developer's machine behind a persistent `cloudflared` tunnel — no hosting costs, no cloud VM. When the tunnel is down the domain is unreachable; when it's up, the extension works from any network.
+
+### Subdomains
+
+You can use any subdomain of `veil-agent.online` for other projects — just add a CNAME or A record in Cloudflare DNS. Cloudflare provides free universal SSL for all subdomains.
 
 ## Quickstart
 
@@ -209,6 +227,34 @@ must never be guessed or reconstructed.
 
 ## Deployment
 
+### Cloudflare Named Tunnel (current production)
+
+The gateway is exposed via a persistent Cloudflare Named Tunnel at `veil-agent.online`.
+This gives HTTPS + WSS with zero hosting cost — traffic flows: Cloudflare edge →
+`cloudflared` on the developer's machine → `localhost:8765`.
+
+```powershell
+# start the tunnel (runs in background)
+Start-Process cmd.exe -ArgumentList "/c `"C:\Users\SATYAS~1\AppData\Local\Temp\opencode\cloudflared.exe`" tunnel run veil"
+```
+
+Tunnel config lives at `~/.cloudflared/config.yml`:
+```yaml
+tunnel: f38af03f-ec8c-4d10-9714-84b96cb2e8f9
+credentials-file: C:\Users\Satyasheel Raman\.cloudflared\f38af03f-ec8c-4d10-9714-84b96cb2e8f9.json
+ingress:
+  - hostname: veil-agent.online
+    service: http://localhost:8765
+  - service: http_status:404
+```
+
+Domain: `veil-agent.online` (purchased, nameservers → Cloudflare).
+DNS route: CNAME `veil-agent.online` → `<tunnel-id>.cfargotunnel.com` (via `cloudflared tunnel route dns`).
+
+**Limitation:** the tunnel only works while the developer's machine is on and `cloudflared` is running. For always-on hosting, use Docker + a cloud VM (below).
+
+### Docker Compose
+
 `infra/docker-compose.yml` ships the gateway as a container:
 
 ```powershell
@@ -229,8 +275,9 @@ The demo page mounts at `/demo`, health at `/health`, rolling latency stats at `
   ("auth token: none → configure"). Leave it empty in local dev to disable the gate.
 - **Rate limiting** — per-connection sliding window (`RATE_LIMIT_MSGS` per
   `RATE_LIMIT_WINDOW_S`, default 60/10s); floods are closed with `4008`.
-- **TLS / WSS** — terminate TLS at your reverse proxy, or run uvicorn with
-  `--ssl-keyfile/--ssl-certfile` (mkcert for dev) and switch the popup URL to `wss://…`.
+- **TLS / WSS** — Cloudflare tunnel handles TLS termination automatically.
+  For self-hosted deployments, run uvicorn with `--ssl-keyfile/--ssl-certfile`
+  (mkcert for dev) or place behind a reverse proxy.
 
 ## Protocol
 
