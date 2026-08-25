@@ -87,7 +87,9 @@ apps/
     tests/                 protocol round-trip, validator suite, golden multi-page tasks
 packages/shared-schema/    Zod contracts — single source of truth
 demo/                      login.html, dashboard.html, transfer.html, confirmation.html,
-                           faces.html (face-blur gallery)
+                            faces.html (face-blur gallery),
+                            medical-dashboard.html, medical-intake.html,
+                            medical-confirmation.html (healthcare patient intake flow)
 eval/                      layout corpus + latency probe (plan_delta-aware)
 infra/                     docker-compose deployment
 ```
@@ -99,7 +101,7 @@ The gateway is live at **https://veil-agent.online** (Render free tier, always-o
 ```
 wss://veil-agent.online/ws          ← extension connects here
 https://veil-agent.online/health    ← liveness probe
-https://veil-agent.online/demo/     ← demo pages (login, dashboard, transfer, faces)
+https://veil-agent.online/demo/     ← demo pages (login, dashboard, transfer, faces, medical)
 ```
 
 The server runs on Render's free tier with auto-deploy from the `main` branch. An UptimeRobot monitor pings `/health` every 5 minutes to prevent spin-down.
@@ -148,7 +150,13 @@ Firefox: load `.output/firefox-mv2` via `about:debugging` → **Load Temporary A
 4. **Face privacy** — open `demo/faces.html` (needs internet for the photos),
    any task: the vision line reports `N face(s) blurred` — and the server's own
    thought confirms it *sees* blurred faces in the sanitized image.
-5. Watch every stage live in the popup log: redact / ner / vision / ocr / vit /
+5. **Healthcare intake** — open `demo/medical-dashboard.html`, task:
+   `Fill the new patient intake form for Priya Patel, DOB 22/07/1990, phone +91 76543 21098,
+   email priya.patel@example.com, insurance INS-56789012, Aadhaar 2345 6789 0123`
+   → agent navigates to intake form, fills all fields via refs (person name, email,
+   phone, Aadhaar all masked), submits, lands on confirmation page, reports done.
+   Demonstrates cross-domain versatility (healthcare vs banking).
+6. Watch every stage live in the popup log: redact / ner / vision / ocr / vit /
    plan / execute, with timings and the streaming "thinking" card.
 
 ### Popup controls

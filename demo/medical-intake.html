@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>MediCare Clinic — Patient Intake (Demo)</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Segoe UI", system-ui, sans-serif; }
+      body { background: linear-gradient(135deg, #0c1222, #064e3b); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+      .card { background: #fff; border-radius: 16px; padding: 32px; width: 100%; max-width: 520px; box-shadow: 0 25px 60px rgba(0,0,0,.45); }
+      .logo { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+      .logo-badge { width: 36px; height: 36px; border-radius: 10px; background: #059669; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; }
+      h1 { font-size: 18px; color: #0f172a; }
+      .sub { color: #64748b; font-size: 13px; margin-bottom: 20px; }
+      .section-label { font-size: 12px; font-weight: 700; color: #059669; text-transform: uppercase; letter-spacing: 0.5px; margin: 18px 0 10px; padding-bottom: 4px; border-bottom: 1.5px solid #d1fae5; }
+      label { display: block; font-size: 12px; font-weight: 600; color: #334155; margin: 10px 0 5px; }
+      input, textarea, select { width: 100%; padding: 10px 12px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 13px; outline: none; transition: border-color .15s; }
+      textarea { resize: vertical; min-height: 60px; }
+      input:focus, textarea:focus, select:focus { border-color: #059669; box-shadow: 0 0 0 3px rgba(5,150,105,.12); }
+      .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+      button[type=submit] { width: 100%; margin-top: 20px; background: #059669; color: #fff; border: 0; padding: 12px; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; transition: background .15s; }
+      button[type=submit]:hover { background: #047857; }
+      .link { text-align: center; font-size: 13px; color: #059669; text-decoration: none; font-weight: 600; display: block; margin-top: 14px; }
+      .link:hover { text-decoration: underline; }
+      .seed { margin-top: 10px; width: 100%; background: #f1f5f9; color: #475569; border: 1px dashed #94a3b8; padding: 10px; border-radius: 10px; font-size: 12px; cursor: pointer; }
+      .banner { margin-top: 14px; background: #fef9c3; border: 1px solid #fde047; color: #854d0e; border-radius: 10px; padding: 10px 14px; font-size: 11.5px; line-height: 1.5; }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="logo">
+        <div class="logo-badge">+</div>
+        <h1>MediCare — New Patient Intake</h1>
+      </div>
+      <p class="sub">Complete the form below to register a new patient</p>
+
+      <form id="intake-form">
+        <div class="section-label">Personal Information</div>
+
+        <div class="grid-2">
+          <div>
+            <label for="first-name">First Name</label>
+            <input id="first-name" name="first-name" type="text" autocomplete="given-name" required />
+          </div>
+          <div>
+            <label for="last-name">Last Name</label>
+            <input id="last-name" name="last-name" type="text" autocomplete="family-name" required />
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <label for="dob">Date of Birth</label>
+            <input id="dob" name="dob" type="date" autocomplete="bday" required />
+          </div>
+          <div>
+            <label for="blood-group">Blood Group</label>
+            <select id="blood-group" name="blood-group" required>
+              <option value="">Select...</option>
+              <option>A+</option><option>A-</option>
+              <option>B+</option><option>B-</option>
+              <option>AB+</option><option>AB-</option>
+              <option>O+</option><option>O-</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="section-label">Contact Information</div>
+
+        <div class="grid-2">
+          <div>
+            <label for="phone">Phone Number</label>
+            <input id="phone" name="phone" type="tel" autocomplete="tel" required />
+          </div>
+          <div>
+            <label for="email">Email Address</label>
+            <input id="email" name="email" type="email" autocomplete="email" required />
+          </div>
+        </div>
+
+        <label for="address">Home Address</label>
+        <textarea id="address" name="address" autocomplete="street-address" rows="2" required></textarea>
+
+        <div class="section-label">Insurance Details</div>
+
+        <div class="grid-2">
+          <div>
+            <label for="insurance-id">Insurance ID</label>
+            <input id="insurance-id" name="insurance-id" type="text" autocomplete="off" required />
+          </div>
+          <div>
+            <label for="insurance-provider">Provider</label>
+            <input id="insurance-provider" name="insurance-provider" type="text" autocomplete="organization" />
+          </div>
+        </div>
+
+        <div class="section-label">Medical Information</div>
+
+        <div class="grid-2">
+          <div>
+            <label for="medical-record-no">Medical Record No.</label>
+            <input id="medical-record-no" name="medical-record-no" type="text" autocomplete="off" />
+          </div>
+          <div>
+            <label for="aadhaar">Aadhaar Number</label>
+            <input id="aadhaar" name="aadhaar" type="text" autocomplete="off" placeholder="XXXX XXXX XXXX" />
+          </div>
+        </div>
+
+        <label for="known-allergies">Known Allergies</label>
+        <textarea id="known-allergies" name="known-allergies" placeholder="e.g., Penicillin, Peanuts, Latex"></textarea>
+
+        <label for="current-medications">Current Medications</label>
+        <textarea id="current-medications" name="current-medications" placeholder="e.g., Metformin 500mg twice daily"></textarea>
+
+        <label for="emergency-contact">Emergency Contact</label>
+        <input id="emergency-contact" name="emergency-contact" type="text" placeholder="Name and phone number" />
+
+        <label for="reason-for-visit">Reason for Visit</label>
+        <textarea id="reason-for-visit" name="reason-for-visit" placeholder="Describe symptoms or reason..."></textarea>
+
+        <button type="submit">Register Patient</button>
+      </form>
+
+      <a href="medical-dashboard.html" class="link">Back to Dashboard</a>
+
+      <button class="seed" id="seed" type="button">Fill demo data (fictional PII for testing redaction)</button>
+
+      <div class="banner">
+        This is a local demo page for the SIH prototype. All data is fictional and never
+        leaves this page unless you submit the form.
+      </div>
+    </main>
+
+    <script>
+      document.getElementById("seed").addEventListener("click", () => {
+        document.getElementById("first-name").value = "Priya";
+        document.getElementById("last-name").value = "Patel";
+        document.getElementById("dob").value = "1990-07-22";
+        document.getElementById("blood-group").value = "A+";
+        document.getElementById("phone").value = "+91 76543 21098";
+        document.getElementById("email").value = "priya.patel@example.com";
+        document.getElementById("address").value = "15 Park Street, Kolkata 700016";
+        document.getElementById("insurance-id").value = "INS-56789012";
+        document.getElementById("insurance-provider").value = "ICICI Lombard";
+        document.getElementById("medical-record-no").value = "MRN-2026-09347";
+        document.getElementById("aadhaar").value = "2345 6789 0123";
+        document.getElementById("known-allergies").value = "Sulfa drugs";
+        document.getElementById("current-medications").value = "None";
+        document.getElementById("emergency-contact").value = "Vikram Patel (+91 87654 32109)";
+        document.getElementById("reason-for-visit").value = "Annual health checkup";
+      });
+
+      document.getElementById("intake-form").addEventListener("submit", (e) => {
+        e.preventDefault();
+        window.location.href = "medical-confirmation.html";
+      });
+    </script>
+  </body>
+</html>

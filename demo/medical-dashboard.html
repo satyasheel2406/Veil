@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>MediCare Clinic — Patient Portal (Demo)</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Segoe UI", system-ui, sans-serif; }
+      body { background: linear-gradient(135deg, #0c1222, #064e3b); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+      .card { background: #fff; border-radius: 16px; padding: 32px; width: 100%; max-width: 520px; box-shadow: 0 25px 60px rgba(0,0,0,.45); }
+      .header-area { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+      .logo { display: flex; align-items: center; gap: 10px; }
+      .logo-badge { width: 36px; height: 36px; border-radius: 10px; background: #059669; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; }
+      h1 { font-size: 18px; color: #0f172a; }
+      .profile-info { text-align: right; }
+      .welcome { font-size: 13px; font-weight: 600; color: #0f172a; }
+      .role { font-size: 11px; color: #64748b; }
+
+      .patient-card { background: #f0fdf4; border: 1.5px solid #bbf7d0; border-radius: 12px; padding: 16px; margin-bottom: 16px; display: flex; gap: 16px; align-items: center; }
+      .avatar { width: 64px; height: 64px; border-radius: 50%; background: #d1fae5; display: flex; align-items: center; justify-content: center; font-size: 28px; color: #065f46; font-weight: 700; flex-shrink: 0; overflow: hidden; }
+      .avatar img { width: 100%; height: 100%; object-fit: cover; }
+      .patient-details { flex: 1; }
+      .patient-name { font-size: 16px; font-weight: 700; color: #065f46; margin-bottom: 4px; }
+      .patient-meta { font-size: 12px; color: #475569; line-height: 1.6; }
+      .patient-meta strong { color: #0f172a; }
+
+      .section-title { font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; margin-top: 8px; }
+
+      .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin-bottom: 16px; }
+      .info-item { font-size: 13px; color: #334155; }
+      .info-label { color: #64748b; font-size: 11px; }
+      .info-value { font-weight: 600; }
+
+      .medical-box { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; padding: 12px; margin-bottom: 16px; }
+      .medical-box .label { font-size: 11px; font-weight: 600; color: #9a3412; margin-bottom: 4px; }
+      .medical-box .value { font-size: 13px; color: #7c2d12; }
+
+      .actions { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+      .btn-primary { display: block; text-align: center; width: 100%; background: #059669; color: #fff; text-decoration: none; padding: 12px; border-radius: 10px; font-size: 14px; font-weight: 700; transition: background .15s; border: none; cursor: pointer; }
+      .btn-primary:hover { background: #047857; }
+      .btn-secondary { display: block; text-align: center; width: 100%; background: #f1f5f9; color: #0f172a; text-decoration: none; padding: 12px; border-radius: 10px; font-size: 14px; font-weight: 600; transition: background .15s; border: none; cursor: pointer; }
+      .btn-secondary:hover { background: #e2e8f0; }
+
+      .seed { margin-top: 10px; width: 100%; background: #f1f5f9; color: #475569; border: 1px dashed #94a3b8; padding: 10px; border-radius: 10px; font-size: 12px; cursor: pointer; }
+      .banner { margin-top: 14px; background: #fef9c3; border: 1px solid #fde047; color: #854d0e; border-radius: 10px; padding: 10px 14px; font-size: 11.5px; line-height: 1.5; }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="header-area">
+        <div class="logo">
+          <div class="logo-badge">+</div>
+          <h1>MediCare Clinic</h1>
+        </div>
+        <div class="profile-info">
+          <div class="welcome">Dr. <span id="doctor-name">------</span></div>
+          <div class="role">General Physician</div>
+        </div>
+      </div>
+
+      <div class="section-title">Current Patient</div>
+      <div class="patient-card">
+        <div class="avatar" id="patient-avatar">
+          <img id="patient-photo" src="" alt="Patient photo" style="display:none;" />
+          <span id="avatar-letter">?</span>
+        </div>
+        <div class="patient-details">
+          <div class="patient-name" id="patient-name">------</div>
+          <div class="patient-meta">
+            MRN: <strong id="mrn">------</strong><br />
+            DOB: <strong id="dob">--/--/----</strong> &middot; Age: <strong id="age">--</strong><br />
+            Blood: <strong id="blood">--</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">Contact & Insurance</div>
+      <div class="info-grid">
+        <div class="info-item"><div class="info-label">Phone</div><div class="info-value" id="phone">------</div></div>
+        <div class="info-item"><div class="info-label">Email</div><div class="info-value" id="email">------</div></div>
+        <div class="info-item"><div class="info-label">Insurance ID</div><div class="info-value" id="insurance">------</div></div>
+        <div class="info-item"><div class="info-label">Policy Provider</div><div class="info-value" id="policy-provider">------</div></div>
+        <div class="info-item"><div class="info-label">Address</div><div class="info-value" id="address">------</div></div>
+        <div class="info-item"><div class="info-label">Emergency Contact</div><div class="info-value" id="emergency">------</div></div>
+      </div>
+
+      <div class="medical-box">
+        <div class="label">Allergies</div>
+        <div class="value" id="allergies">------</div>
+      </div>
+
+      <div class="actions">
+        <a href="medical-intake.html" class="btn-primary">New Patient Intake</a>
+        <button class="btn-secondary">View Medical History</button>
+      </div>
+
+      <button class="seed" id="seed" type="button">Fill demo data (fictional PII for testing redaction)</button>
+
+      <div class="banner">
+        This is a local demo page for the SIH prototype. All patient data is fictional and never
+        leaves this page unless you interact with it.
+      </div>
+    </main>
+
+    <script>
+      document.getElementById("seed").addEventListener("click", () => {
+        document.getElementById("doctor-name").textContent = "Ananya Verma";
+        document.getElementById("patient-name").textContent = "Rohit Mehta";
+        document.getElementById("avatar-letter").textContent = "R";
+        document.getElementById("mrn").textContent = "MRN-2026-04821";
+        document.getElementById("dob").textContent = "15/03/1985";
+        document.getElementById("age").textContent = "41";
+        document.getElementById("blood").textContent = "B+";
+        document.getElementById("phone").textContent = "+91 87654 32109";
+        document.getElementById("email").textContent = "rohit.mehta@example.com";
+        document.getElementById("insurance").textContent = "INS-98765432";
+        document.getElementById("policy-provider").textContent = "Star Health";
+        document.getElementById("address").textContent = "42 MG Road, Bengaluru 560001";
+        document.getElementById("emergency").textContent = "Sunita Mehta (+91 99887 76655)";
+        document.getElementById("allergies").textContent = "Penicillin, Peanuts";
+      });
+    </script>
+  </body>
+</html>
