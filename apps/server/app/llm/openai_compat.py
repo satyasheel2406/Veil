@@ -89,6 +89,37 @@ def _is_safety_refusal(body_text: str) -> bool:
     return 0 < len(text) < 400 and bool(_SAFETY_REFUSAL_RE.search(text))
 
 
+def _extract_json(text: str) -> dict | None:
+    """Try multiple strategies to pull a JSON object from messy model output."""
+    # Strategy 1: direct parse
+    try:
+        return json.loads(text)
+    except (ValueError, TypeError):
+        pass
+    # Strategy 2: find the outermost { ... } block
+    m = re.search(r"\{[\s\S]*\}", text)
+    if m:
+        try:
+            return json.loads(m.group())
+        except (ValueError, TypeError):
+            pass
+        # Strategy 3: stray leading brace — try from second { onward
+        inner = text[m.start() + 1:]
+        m2 = re.search(r"\{[\s\S]*\}", inner)
+        if m2:
+            try:
+                return json.loads(m2.group())
+            except (ValueError, TypeError):
+                pass
+    # Strategy 4: strip markdown code fences
+    cleaned = re.sub(r"```(?:json)?\s*", "", text).strip().rstrip("`")
+    try:
+        return json.loads(cleaned)
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
 class OpenAICompatProvider:
     def __init__(self, name: str, base_url: str, model: str, api_key: str, timeout_s: float = 20.0):
         self.name = name
@@ -208,17 +239,10 @@ class OpenAICompatProvider:
         try:
             parsed = json.loads(body_text)
         except (ValueError, TypeError):
-            # Free models sometimes ignore response_format and return prose.
-            # Try to extract a JSON object from the text.
-            m = re.search(r"\{[\s\S]*\}", body_text)
-            if m:
-                try:
-                    parsed = json.loads(m.group())
-                except (ValueError, TypeError):
-                    raise ProviderError(
-                        f"{self.name} returned malformed plan JSON; got: {body_text[:200]!r}"
-                    )
-            else:
+            # Free models sometimes ignore response_format and return prose
+            # or malformed JSON (e.g. stray leading brace). Try to extract it.
+            parsed = _extract_json(body_text)
+            if parsed is None:
                 # Model returned pure prose — treat as a fail action so the
                 # agent can surface the model's reasoning instead of crashing.
                 return _typed_plan(
