@@ -7,14 +7,10 @@ services:
       dockerfile: infra/Dockerfile
     ports:
       - "8765:8765"
-    environment:
-      LLM_PROVIDER: ${LLM_PROVIDER:-echo}
-      LLM_MODEL: ${LLM_MODEL:-}
-      LLM_API_KEY: ${LLM_API_KEY:-}
-      LLM_BASE_URL: ${LLM_BASE_URL:-}
-      WS_AUTH_TOKEN: ${WS_AUTH_TOKEN:-}
-      RATE_LIMIT_MSGS: ${RATE_LIMIT_MSGS:-60}
-      RATE_LIMIT_WINDOW_S: ${RATE_LIMIT_WINDOW_S:-10}
+    # Single source of truth: repo-root .env (gitignored) supplies
+    # LLM_PROVIDER/MODEL/API_KEY/BASE_URL, WS_AUTH_TOKEN, RATE_LIMIT_*
+    env_file:
+      - ../.env
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8765/health')"]

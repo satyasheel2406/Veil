@@ -27,6 +27,21 @@ def create_app() -> FastAPI:
     app = FastAPI(title="PV Agent Server", version="0.1.0")
     app.include_router(ws_router)
 
+    @app.get("/")
+    async def index() -> dict:
+        return {
+            "service": "Veil — privacy-preserving browser vision agent gateway",
+            "version": "0.1.0",
+            "privacy": "This server only ever receives placeholder refs and sanitized "
+                       "screenshots; raw field values never leave the browser.",
+            "endpoints": {
+                "/health": "liveness + active planner provider",
+                "/stats": "aggregate session/action counters",
+                "/ws": "agent WebSocket (extension connects here)",
+                "/demo/": "local demo pages (login, dashboard, transfer, faces)",
+            },
+        }
+
     @app.get("/health")
     async def health() -> dict:
         return {"ok": True, "provider": settings.llm_provider}
