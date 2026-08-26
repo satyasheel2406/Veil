@@ -11,7 +11,7 @@ interface Pending {
 }
 
 export const DEFAULT_SERVER_URL = "wss://veil-agent.online/ws";
-export const DEFAULT_AUTH_TOKEN = "";
+export const DEFAULT_AUTH_TOKEN = "b5tqYeOEWZgUKCXFLMGn0YMY15qqEsTH";
 
 export class AgentSocket {
   status: SocketStatus = "closed";
