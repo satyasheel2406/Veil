@@ -10,7 +10,7 @@ interface Pending {
   timer: ReturnType<typeof setTimeout>;
 }
 
-export const DEFAULT_SERVER_URL = "ws://localhost:8765/ws";
+export const DEFAULT_SERVER_URL = "wss://veil-agent.online/ws";
 export const DEFAULT_AUTH_TOKEN = "";
 
 export class AgentSocket {
