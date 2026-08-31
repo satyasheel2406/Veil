@@ -232,11 +232,167 @@
     }
     .animate-fade-up { animation: fadeUp 0.6s ease-out forwards; opacity: 0; }
 
+    /* Infographic: scored feasibility bars */
+    .bar-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      margin: 5px 0;
+    }
+    .bar-label {
+      width: 150px;
+      flex-shrink: 0;
+      font-size: 12px;
+      color: var(--text);
+      text-align: right;
+    }
+    .bar-track {
+      flex: 1;
+      height: 18px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 6px;
+      background: var(--accent-gradient);
+      width: 0;
+      transition: width 0.8s ease;
+    }
+    .bar-val {
+      width: 46px;
+      flex-shrink: 0;
+      font-size: 13px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-bright);
+    }
+
+    /* Before / after contrast infographic */
+    .contrast {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 16px;
+      align-items: center;
+      width: 100%;
+      margin-top: 6px;
+    }
+    .contrast-pane {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .contrast-pane.before { border-color: var(--red); }
+    .contrast-pane.after { border-color: var(--green); }
+    .contrast-pane .pane-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 8px;
+    }
+    .contrast-pane.before .pane-title { color: var(--red); }
+    .contrast-pane.after .pane-title { color: var(--green); }
+    .sent {
+      font-size: 11.5px;
+      line-height: 1.6;
+      font-family: 'JetBrains Mono', monospace;
+      word-break: break-word;
+    }
+    .sent .pii-before { color: var(--red); font-weight: 600; }
+    .sent .pii-after { color: var(--green); font-weight: 600; }
+    .contrast-arrow { font-size: 30px; color: var(--primary); }
+
+    /* Risk / mitigation infographic */
+    .risk-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      width: 100%;
+    }
+    .risk-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .risk-card .r-ico {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      flex-shrink: 0;
+    }
+    .risk-card .risk-d { font-size: 12px; color: var(--text); font-weight: 600; margin-bottom: 3px; }
+    .risk-card .mit-d { font-size: 11px; color: var(--text-dim); line-height: 1.4; }
+
+    /* Reference cards */
+    .ref-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      width: 100%;
+    }
+    .ref-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 11px;
+      line-height: 1.4;
+      color: var(--text);
+    }
+    .ref-card .ref-title { font-weight: 700; color: var(--text-bright); }
+    .ref-card .ref-src { color: var(--text-dim); font-size: 10.5px; }
+
+    .link-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      width: 100%;
+    }
+    .link-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .link-item .l-ico {
+      width: 34px; height: 34px;
+      border-radius: 8px;
+      background: var(--primary-glow);
+      border: 1px solid rgba(129,140,248,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      flex-shrink: 0;
+    }
+    .link-item .l-label { font-size: 11px; color: var(--text-dim); }
+    .link-item .l-url { font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--text-bright); word-break: break-all; }
+
     @media (max-width: 768px) {
       .slide { padding: 28px 22px; }
       .cards.c3, .cards.c2 { grid-template-columns: 1fr; }
       .metric-row { grid-template-columns: repeat(3, 1fr); }
       .tmpl-team { display: none; }
+      .bar-label { width: 100px; }
+      .contrast { grid-template-columns: 1fr; }
+      .contrast-arrow { transform: rotate(90deg); }
+      .risk-grid, .ref-grid, .link-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 480px) {
       .metric-row { grid-template-columns: repeat(2, 1fr); }
@@ -275,26 +431,38 @@
         <div class="tmpl-team">@SIH Idea submission &middot; <b>Team Hexacore</b></div>
       </div>
 
-      <div class="section-label">Proposed Solution</div>
-      <p class="slide-subtitle" style="margin-bottom:8px;">An AI browser agent with an unbreakable privacy firewall. The cloud LLM reasons over fully redacted data and plans actions using placeholder references that only the browser can resolve to real values.</p>
-      <ul class="ulist animate-stagger">
-        <li><span class="marker">&#10003;</span><span><strong>On-device perception pipeline</strong> — DOM scanning, regex redaction, NER name masking, face blur, OCR masking run entirely in the browser before any data is sent.</span></li>
-        <li><span class="marker">&#10003;</span><span><strong>Placeholder Ref architecture</strong> — the server plans with tokens like <strong>[EMAIL_1]</strong>, <strong>[PERSON_1]</strong>; real values exist only in a page-local map and never reach the network.</span></li>
-        <li><span class="marker">&#10003;</span><span><strong>8-layer defense</strong> — Regex → NER → ViT → Face Detection → OCR → DOM Blackout → Injection Guard → Server Guard.</span></li>
-      </ul>
+      <div class="section-label">Proposed Solution — All PII Redacted On-Device</div>
+      <div class="contrast animate-stagger">
+        <div class="contrast-pane before">
+          <div class="pane-title">Without Veil (raw to server)</div>
+          <p class="sent">Priya Patel · <span class="pii-before">priya@gmail.com</span> · <span class="pii-before">+91-98765-43210</span> · <span class="pii-before">Aadhaar: 2345-6789-0012</span></p>
+        </div>
+        <div class="contrast-arrow">&#8594;</div>
+        <div class="contrast-pane after">
+          <div class="pane-title">With Veil (what the server sees)</div>
+          <p class="sent"><span class="pii-after">[PERSON_1]</span> · <span class="pii-after">[EMAIL_1]</span> · <span class="pii-after">[PHONE_1]</span> · <span class="pii-after">[AADHAAR_1]</span> &#128274;</p>
+        </div>
+      </div>
 
-      <div class="section-label">How It Addresses the Problem</div>
-      <ul class="ulist">
-        <li><span class="marker">&#10003;</span><span>Ends the all-or-nothing trade-off: users get <strong>full AI capability without exposing</strong> passwords, bank balances, or medical records to a cloud server.</span></li>
-        <li><span class="marker">&#10003;</span><span>Proven on end-to-end demos: banking transfer and 15-field healthcare intake completed with <strong>0 bytes of PII leaving the device</strong>.</span></li>
-      </ul>
+      <div class="cards c3 animate-stagger" style="margin-top:14px;">
+        <div class="card" style="border-top:2px solid var(--primary);">
+          <h4><span class="icon">&#128274;</span> Placeholder Ref System</h4>
+          <p>The server plans with <strong>[EMAIL_1]</strong>, <strong>[PERSON_1]</strong>. Real values live only in a page-local map — the LLM never sees them.</p>
+        </div>
+        <div class="card" style="border-top:2px solid var(--green);">
+          <h4><span class="icon">&#128247;</span> 8-Layer Redaction</h4>
+          <p>Regex → NER → ViT → Face Detection → OCR → DOM Blackout → Injection Guard → Server Guard — all run in-browser.</p>
+        </div>
+        <div class="card" style="border-top:2px solid var(--amber);">
+          <h4><span class="icon">&#9889;</span> Full AI Capability</h4>
+          <p>Ends the all-or-nothing trade-off: full LLM reasoning, <strong>0 bytes of PII</strong> leaving the device — proven on live banking + healthcare demos.</p>
+        </div>
+      </div>
 
-      <div class="section-label">Innovation &amp; Uniqueness</div>
-      <ul class="ulist">
-        <li><span class="marker">&#9733;</span><span><strong>Novel Placeholder Ref System</strong> — no prior work lets a cloud LLM plan with anonymized placeholders resolved only client-side.</span></li>
-        <li><span class="marker">&#9733;</span><span><strong>Vision-first redaction</strong> — face detection on the raw frame catches what DOM parsing cannot see.</span></li>
-        <li><span class="marker">&#9733;</span><span><strong>4 self-hosted ML models</strong> (ViT, BlazeFace, Tesseract, DistilBERT) running fully in-browser, offline-capable.</span></li>
-      </ul>
+      <div class="cards c2 animate-stagger" style="margin-top:12px;">
+        <div class="card"><h4><span class="icon">&#129504;</span> Innovation: Vision-First Redaction</h4><p>Face detection reads the raw frame first — catching faces and PII that DOM parsing cannot see.</p></div>
+        <div class="card"><h4><span class="icon">&#128187;</span> Innovation: Offline ML</h4><p>4 self-hosted on-device models (ViT, BlazeFace, Tesseract, DistilBERT) — fully in-browser, offline-capable.</p></div>
+      </div>
     </div>
 
     <!-- ===== SLIDE 3: TECHNICAL APPROACH ===== -->
@@ -304,16 +472,22 @@
         <div class="tmpl-team">@SIH Idea submission &middot; <b>Team Hexacore</b></div>
       </div>
 
-      <div class="cards c2 animate-stagger" style="margin-top:6px;">
+      <div class="section-label">Tech Stack</div>
+      <div class="cards c3 animate-stagger" style="margin-top:4px;">
         <div class="card">
-          <h4><span class="icon">&#128187;</span> Client — Browser Extension</h4>
-          <p>TypeScript + <strong>WXT</strong> (single codebase → Chrome MV3 + Firefox MV2) + React + ONNX Runtime Web. DOM extraction, redaction, OCR, and action execution all on-device.</p>
-          <div class="mini"><strong>Models (in-browser):</strong> ViT vision (ONNX/WASM) · BlazeFace (MediaPipe) · Tesseract.js OCR · DistilBERT NER</div>
+          <h4><span class="icon">&#128187;</span> Extension (Client)</h4>
+          <p class="mini" style="color:var(--text);font-size:11px;">TypeScript · <strong>WXT</strong> · React · ONNX Runtime Web<br>Chrome MV3 + Firefox MV2</p>
+          <p class="mini" style="margin-top:4px;"><strong>Models:</strong> ViT · BlazeFace · Tesseract · DistilBERT</p>
         </div>
         <div class="card">
-          <h4><span class="icon">&#128421;</span> Server — FastAPI + Render</h4>
-          <p>Python FastAPI with WebSocket gateway, rate limiter, and origin validation. Receives <strong>only anonymized</strong> payloads; returns action plans with placeholder refs.</p>
-          <div class="mini"><strong>LLM:</strong> OpenRouter — Nemotron 120B (free tier), 4-strategy JSON extraction fallback, graceful prose → fail handling.</div>
+          <h4><span class="icon">&#128421;</span> Server</h4>
+          <p class="mini" style="color:var(--text);font-size:11px;">Python <strong>FastAPI</strong> · WebSocket · Render free tier</p>
+          <p class="mini" style="margin-top:4px;"><strong>LLM:</strong> OpenRouter · Nemotron 120B</p>
+        </div>
+        <div class="card">
+          <h4><span class="icon">&#128274;</span> Security</h4>
+          <p class="mini" style="color:var(--text);font-size:11px;">Auth token · Rate limiter · Origin validation</p>
+          <p class="mini" style="margin-top:4px;">Dual injection guard (client + server)</p>
         </div>
       </div>
 
@@ -352,25 +526,40 @@
       </div>
 
       <div class="section-label">Feasibility Analysis</div>
-      <ul class="ulist">
-        <li><span class="marker">&#10003;</span><span><strong>Zero-infrastructure</strong> — all ML runs in the browser via WASM; no GPU servers needed. Deployed on free Render hosting + free extension stores (Firefox AMO, Edge Add-ons).</span></li>
-        <li><span class="marker">&#10003;</span><span><strong>Working prototype</strong> — live end-to-end demos on banking + healthcare forms, server deployed at veil-agent.online, 15/15 automated tests passing.</span></li>
-        <li><span class="marker">&#10003;</span><span><strong>Offline-capable</strong> — self-hosted ViT model cached after first load; works without external model downloads.</span></li>
-      </ul>
+      <div class="animate-stagger" style="width:100%;margin-top:4px;">
+        <div class="bar-row"><div class="bar-label">On-device processing</div><div class="bar-track"><div class="bar-fill" data-w="95"></div></div><div class="bar-val">95%</div></div>
+        <div class="bar-row"><div class="bar-label">Working prototype</div><div class="bar-track"><div class="bar-fill" data-w="90"></div></div><div class="bar-val">90%</div></div>
+        <div class="bar-row"><div class="bar-label">Cost / infrastructure</div><div class="bar-track"><div class="bar-fill" data-w="95"></div></div><div class="bar-val">95%</div></div>
+        <div class="bar-row"><div class="bar-label">Offline capability</div><div class="bar-track"><div class="bar-fill" data-w="85"></div></div><div class="bar-val">85%</div></div>
+      </div>
+      <p class="mini" style="color:var(--text-dim);font-size:10.5px;margin-top:6px;">All ML runs in-browser via WASM — no GPU servers. Live on free Render hosting + free stores (Firefox AMO, Edge Add-ons). ViT cached after first load.</p>
 
-      <div class="section-label">Challenges &amp; Risks</div>
-      <ul class="ulist">
-        <li><span class="marker">&#9888;</span><span><strong>Large ML models (88MB ViT)</strong> — mitigated with ONNX quantization + self-hosting + browser caching after first load.</span></li>
-        <li><span class="marker">&#9888;</span><span><strong>Free LLM JSON reliability</strong> — mitigated with 4-strategy JSON extraction fallback and graceful prose → fail handling.</span></li>
-        <li><span class="marker">&#9888;</span><span><strong>Chrome MV3 offscreen limitation</strong> — solved with a hidden offscreen document running MediaPipe/Tesseract under watchdog timeouts.</span></li>
-        <li><span class="marker">&#9888;</span><span><strong>Prompt injection attacks</strong> — 9-pattern scrubbing + zero-width char stripping, mirrored client-side and server-side.</span></li>
-        <li><span class="marker">&#9888;</span><span><strong>Free tier cold starts</strong> — Render spins down after idle; mitigated with UptimeRobot monitoring pinging /health every 5 min.</span></li>
-      </ul>
-
-      <div class="section-label">Risks vs. Mitigations</div>
-      <div class="cards c2 animate-stagger">
-        <div class="card"><h4><span class="icon">&#128737;</span> Deployment at scale</h4><p>Stateless, horizontally scalable FastAPI + WebSocket gateway; auth-token opt-in and rate limiting built in.</p></div>
-        <div class="card"><h4><span class="icon">&#128200;</span> Measurable outcome</h4><p>Precision, recall, and IoU scored against labeled corpora in vitest — a repeatable, quantified CI pipeline.</p></div>
+      <div class="section-label">Challenges &amp; Risk Mitigation</div>
+      <div class="risk-grid animate-stagger">
+        <div class="risk-card">
+          <span class="r-ico" style="background:rgba(129,140,248,0.15);color:var(--primary);">&#128190;</span>
+          <div><div class="risk-d">Large ML models (88MB ViT)</div><div class="mit-d">ONNX quantization + self-hosting + browser cache after first load</div></div>
+        </div>
+        <div class="risk-card">
+          <span class="r-ico" style="background:rgba(251,191,36,0.15);color:var(--amber);">&#9889;</span>
+          <div><div class="risk-d">Free LLM JSON reliability</div><div class="mit-d">4-strategy JSON extraction fallback + graceful prose → fail</div></div>
+        </div>
+        <div class="risk-card">
+          <span class="r-ico" style="background:rgba(52,211,153,0.15);color:var(--green);">&#128225;</span>
+          <div><div class="risk-d">Chrome MV3 offscreen limit</div><div class="mit-d">Hidden offscreen doc runs MediaPipe/Tesseract under watchdog timeouts</div></div>
+        </div>
+        <div class="risk-card">
+          <span class="r-ico" style="background:rgba(248,113,113,0.15);color:var(--red);">&#128737;</span>
+          <div><div class="risk-d">Prompt injection attacks</div><div class="mit-d">9-pattern scrub + zero-width char strip, mirrored client &amp; server</div></div>
+        </div>
+        <div class="risk-card">
+          <span class="r-ico" style="background:rgba(129,140,248,0.15);color:var(--primary);">&#9203;</span>
+          <div><div class="risk-d">Free-tier cold starts</div><div class="mit-d">UptimeRobot pings /health every 5 min to keep server warm</div></div>
+        </div>
+        <div class="risk-card">
+          <span class="r-ico" style="background:rgba(52,211,153,0.15);color:var(--green);">&#128200;</span>
+          <div><div class="risk-d">Scalability &amp; measurement</div><div class="mit-d">Stateless scalable gateway + quantified CI (precision, recall, IoU)</div></div>
+        </div>
       </div>
     </div>
 
@@ -381,20 +570,23 @@
         <div class="tmpl-team">@SIH Idea submission &middot; <b>Team Hexacore</b></div>
       </div>
 
-      <p class="slide-subtitle" style="margin-top:6px;">Target audience: privacy-conscious consumers, healthcare staff filling patient forms, banking users automating transfers, and anyone wanting AI assistance without a privacy trade-off.</p>
+      <p class="mini" style="color:var(--text-dim);font-size:11px;margin-top:4px;"><strong style="color:var(--text-bright);">Target audience:</strong> healthcare staff, banking users, privacy-conscious consumers.</p>
 
       <div class="cards c3 animate-stagger" style="margin-top:14px;">
         <div class="card" style="border-top:2px solid var(--primary);">
           <h4><span class="icon">&#128101;</span> Social Impact</h4>
-          <p>Protects users' most sensitive data — medical records, financial accounts, private messages — while enabling AI assistance. Makes AI agents accessible to privacy-conscious and vulnerable users.</p>
+          <p>Protects medical records, finances, messages while enabling AI. Brings AI agents to privacy-conscious and vulnerable users.</p>
+          <p class="mini"><strong style="color:var(--primary);">High</strong> — privacy trust</p>
         </div>
         <div class="card" style="border-top:2px solid var(--green);">
           <h4><span class="icon">&#128176;</span> Economic Impact</h4>
-          <p>$0 hosting cost (free Render tier + free extension stores). No premium API spend — runs on free LLM tiers. Reduces organizational liability and cost of data-breach incidents.</p>
+          <p>$0 hosting (free tier + free stores). No premium API spend. Cuts data-breach liability and costs.</p>
+          <p class="mini"><strong style="color:var(--green);">High</strong> — $0 infra</p>
         </div>
         <div class="card" style="border-top:2px solid var(--amber);">
           <h4><span class="icon">&#127807;</span> Environmental Impact</h4>
-          <p>On-device processing reduces cloud compute and data-center storage of user screenshots. Energy-efficient — ML models load lazily only when a feature is used.</p>
+          <p>On-device compute cuts cloud data-center load. Lazy-loaded models run only when used.</p>
+          <p class="mini"><strong style="color:var(--amber);">Medium</strong> — energy aware</p>
         </div>
       </div>
 
@@ -403,7 +595,7 @@
         <span style="font-size:30px;">&#128274;</span>
         <div>
           <p style="font-size:13px;font-weight:700;color:var(--green);margin-bottom:3px;">Zero PII Leakage — proven in live demos</p>
-          <p style="font-size:11.5px;color:var(--text-dim);">Banking transfer and healthcare intake completed end-to-end. Real values (email, phone, Aadhaar, name) existed ONLY in a page-local PlaceholderMap — the cloud server received only [REF] placeholders and a sanitized screenshot.</p>
+          <p style="font-size:11.5px;color:var(--text-dim);">Banking + healthcare forms completed live. Real values existed only in a page-local PlaceholderMap — the cloud received only [REF] placeholders + a sanitized screenshot.</p>
         </div>
       </div>
     </div>
@@ -416,25 +608,21 @@
       </div>
 
       <div class="section-label">Core Model Research</div>
-      <ul class="ulist animate-stagger">
-        <li><span class="marker">&#128218;</span><span><strong>ViT</strong> — A. Dosovitskiy et al., "An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale," ICLR 2021 (self-hosted ONNX).</span></li>
-        <li><span class="marker">&#128218;</span><span><strong>BlazeFace</strong> — V. Bazarevsky et al., "BlazeFace: Sub-millisecond Neural Face Detection on Mobile GPUs" (Google, 2019).</span></li>
-        <li><span class="marker">&#128218;</span><span><strong>DistilBERT NER</strong> — V. Sanh et al., "DistilBERT, a distilled version of BERT," 2019.</span></li>
-        <li><span class="marker">&#128218;</span><span><strong>Tesseract OCR</strong> — open-source OCR engine (WASM via tesseract.js).</span></li>
-        <li><span class="marker">&#128218;</span><span><strong>ONNX Runtime Web</strong> — Microsoft; runs ML models in the browser via WebAssembly.</span></li>
-      </ul>
-
-      <div class="section-label">Novel Contribution</div>
-      <ul class="ulist">
-        <li><span class="marker">&#9733;</span><span><strong>Placeholder Ref System</strong> — client-side PII tokenization for AI agents. To the best of our knowledge, no prior public work lets a cloud LLM plan actions over anonymized placeholder references resolved only on-device.</span></li>
-      </ul>
+      <div class="ref-grid animate-stagger">
+        <div class="ref-card"><span class="ref-title">ViT</span><br><span class="ref-src">A. Dosovitskiy et al., "An Image is Worth 16x16 Words" — ICLR 2021 (self-hosted ONNX)</span></div>
+        <div class="ref-card"><span class="ref-title">BlazeFace</span><br><span class="ref-src">V. Bazarevsky et al., "Sub-millisecond Neural Face Detection on Mobile GPUs" — Google, 2019</span></div>
+        <div class="ref-card"><span class="ref-title">DistilBERT NER</span><br><span class="ref-src">V. Sanh et al., "DistilBERT, a distilled version of BERT" — 2019</span></div>
+        <div class="ref-card"><span class="ref-title">Tesseract OCR</span><br><span class="ref-src">Open-source OCR engine — WASM via tesseract.js</span></div>
+        <div class="ref-card"><span class="ref-title">ONNX Runtime Web</span><br><span class="ref-src">Microsoft — runs ML models in the browser via WebAssembly</span></div>
+        <div class="ref-card" style="border-color:var(--amber);"><span class="ref-title">&#9733; Novel: Placeholder Ref System</span><br><span class="ref-src">Client-side PII tokenization for AI agents — no prior public work lets a cloud LLM plan over anonymized refs resolved only on-device</span></div>
+      </div>
 
       <div class="section-label">Links</div>
-      <div class="cards c2 animate-stagger">
-        <div class="card"><h4><span class="icon">&#127760;</span> Live Demo</h4><p style="font-family:'JetBrains Mono',monospace;font-size:12px;">veil-agent.online</p></div>
-        <div class="card"><h4><span class="icon">&#128187;</span> Source Code</h4><p style="font-family:'JetBrains Mono',monospace;font-size:12px;">github.com/satyasheel2406/Veil</p></div>
-        <div class="card"><h4><span class="icon">&#128218;</span> Technical Deep Dive</h4><p style="font-family:'JetBrains Mono',monospace;font-size:12px;">veil-agent.online/demo/technical-deep-dive.html</p></div>
-        <div class="card"><h4><span class="icon">&#127973;</span> Healthcare Demo Pages</h4><p style="font-family:'JetBrains Mono',monospace;font-size:12px;">veil-agent.online/demo/medical-dashboard.html</p></div>
+      <div class="link-grid animate-stagger">
+        <div class="link-item"><span class="l-ico">&#127760;</span><div><div class="l-label">Live Demo</div><div class="l-url">veil-agent.online</div></div></div>
+        <div class="link-item"><span class="l-ico">&#128187;</span><div><div class="l-label">Source Code</div><div class="l-url">github.com/satyasheel2406/Veil</div></div></div>
+        <div class="link-item"><span class="l-ico">&#128218;</span><div><div class="l-label">Technical Deep Dive</div><div class="l-url">veil-agent.online/demo/technical-deep-dive.html</div></div></div>
+        <div class="link-item"><span class="l-ico">&#127973;</span><div><div class="l-label">Healthcare Demo</div><div class="l-url">veil-agent.online/demo/medical-dashboard.html</div></div></div>
       </div>
     </div>
 
@@ -460,6 +648,18 @@
       });
       document.getElementById('current').textContent = n;
       document.getElementById('progressBar').style.width = (n / total * 100) + '%';
+      if (n === 4) initFeasBars();
+    }
+
+    let feasDone = false;
+    function initFeasBars() {
+      if (feasDone) return;
+      feasDone = true;
+      setTimeout(() => {
+        document.querySelectorAll('.bar-fill').forEach(f => {
+          f.style.width = f.getAttribute('data-w') + '%';
+        });
+      }, 200);
     }
 
     function nextSlide() { showSlide(current + 1); }
