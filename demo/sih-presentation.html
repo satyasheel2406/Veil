@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Veil — SIH 2026 Presentation | Team Hexacore</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+    :root {
+      --bg: #06080f;
+      --surface: #0d1117;
+      --surface2: #161b22;
+      --border: #21262d;
+      --primary: #818cf8;
+      --primary-glow: rgba(129, 140, 248, 0.15);
+      --green: #34d399;
+      --green-glow: rgba(52, 211, 153, 0.12);
+      --amber: #fbbf24;
+      --red: #f87171;
+      --text: #e6edf3;
+      --text-dim: #8b949e;
+      --text-bright: #f0f6fc;
+      --accent-gradient: linear-gradient(135deg, #818cf8, #34d399);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .slide-deck {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    @media (min-width: 769px) {
+      .slide-deck {
+        max-width: calc(100vh * 16 / 9);
+        max-height: calc(100vw * 9 / 16);
+        margin: auto;
+        position: absolute;
+        inset: 0;
+      }
+    }
+
+    .slide {
+      position: absolute;
+      width: 100%; height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 48px 60px;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.5s ease;
+      background: var(--bg);
+      overflow: hidden;
+    }
+    .slide.active { opacity: 1; visibility: visible; }
+
+    .progress-bar {
+      position: fixed;
+      top: 0; left: 0;
+      height: 3px;
+      background: var(--accent-gradient);
+      transition: width 0.4s ease;
+      z-index: 1000;
+    }
+
+    .nav-controls {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      z-index: 1000;
+    }
+    .nav-btn {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      color: var(--text);
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 15px;
+      transition: all 0.2s;
+    }
+    .nav-btn:hover { background: rgba(255,255,255,0.12); border-color: var(--primary); }
+    .slide-counter { color: var(--text-dim); font-size: 12px; font-family: 'JetBrains Mono', monospace; }
+
+    /* Header bar for template slides */
+    .tmpl-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .tmpl-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(20px, 2.6vw, 30px);
+      font-weight: 700;
+      color: var(--text-bright);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .tmpl-title .gradient-text { background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .tmpl-team {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+      white-space: nowrap;
+    }
+    .tmpl-team b { color: var(--primary); }
+
+    .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--text-dim);
+      margin: 14px 0 8px;
+    }
+    .section-label:first-of-type { margin-top: 8px; }
+
+    .slide-subtitle {
+      font-size: clamp(13px, 1.6vw, 16px);
+      color: var(--text-dim);
+      line-height: 1.5;
+      max-width: 860px;
+    }
+
+    /* Bullet rows */
+    .ulist { list-style: none; }
+    .ulist li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 6px 0;
+      font-size: clamp(12px, 1.45vw, 14.5px);
+      line-height: 1.5;
+      color: var(--text);
+    }
+    .ulist li .marker {
+      flex-shrink: 0;
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      background: var(--primary-glow);
+      border: 1px solid rgba(129,140,248,0.4);
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      margin-top: 3px;
+    }
+    .ulist li strong { color: var(--text-bright); }
+
+    /* Cards */
+    .cards {
+      display: grid;
+      gap: 12px;
+      width: 100%;
+    }
+    .cards.c3 { grid-template-columns: repeat(3, 1fr); }
+    .cards.c2 { grid-template-columns: repeat(2, 1fr); }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .card h4 { font-size: 13px; font-weight: 700; color: var(--text-bright); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+    .card p { font-size: 11.5px; color: var(--text-dim); line-height: 1.5; }
+    .card .mini { font-size: 10.5px; color: var(--text-dim); margin-top: 6px; line-height: 1.4; }
+    .icon { font-size: 20px; }
+
+    /* Metric chips */
+    .metric-row {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      width: 100%;
+    }
+    .chip {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      text-align: center;
+    }
+    .chip .v {
+      font-size: 22px;
+      font-weight: 800;
+      font-family: 'Space Grotesk', sans-serif;
+      color: var(--primary);
+    }
+    .chip .l {
+      font-size: 9.5px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      line-height: 1.3;
+      margin-top: 2px;
+    }
+    .chip.green .v { color: var(--green); }
+    .chip.amber .v { color: var(--amber); }
+
+    /* Animations */
+    .animate-stagger > * {
+      opacity: 0;
+      animation: fadeUp 0.5s ease-out forwards;
+    }
+    .animate-stagger > *:nth-child(1) { animation-delay: 0.05s; }
+    .animate-stagger > *:nth-child(2) { animation-delay: 0.1s; }
+    .animate-stagger > *:nth-child(3) { animation-delay: 0.15s; }
+    .animate-stagger > *:nth-child(4) { animation-delay: 0.2s; }
+    .animate-stagger > *:nth-child(5) { animation-delay: 0.25s; }
+    .animate-stagger > *:nth-child(6) { animation-delay: 0.3s; }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-up { animation: fadeUp 0.6s ease-out forwards; opacity: 0; }
+
+    @media (max-width: 768px) {
+      .slide { padding: 28px 22px; }
+      .cards.c3, .cards.c2 { grid-template-columns: 1fr; }
+      .metric-row { grid-template-columns: repeat(3, 1fr); }
+      .tmpl-team { display: none; }
+    }
+    @media (max-width: 480px) {
+      .metric-row { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <div class="progress-bar" id="progressBar"></div>
+
+  <div class="slide-deck">
+
+    <!-- ===== SLIDE 1: TITLE ===== -->
+    <div class="slide active" id="s1">
+      <div style="display:flex;flex-direction:column;align-items:center;text-align:center;justify-content:center;height:100%;">
+        <div style="width:78px;height:78px;border-radius:20px;background:var(--accent-gradient);display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:900;color:#fff;margin-bottom:22px;box-shadow:0 0 50px rgba(129,140,248,0.3);" class="animate-fade-up">V</div>
+        <h1 style="font-family:'Space Grotesk',sans-serif;font-size:clamp(44px,6vw,84px);font-weight:900;line-height:1.05;margin-bottom:18px;" class="animate-fade-up"><span class="gradient-text" style="background:var(--accent-gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Veil</span></h1>
+        <p style="font-size:clamp(15px,2vw,21px);color:var(--text-dim);max-width:660px;line-height:1.6;margin-bottom:30px;" class="animate-fade-up">A privacy-preserving browser vision agent that reads your screen locally, redacts every sensitive value on-device, and sends only anonymized data to the cloud for AI reasoning.</p>
+        <div class="metric-row animate-stagger" style="max-width:820px;margin-bottom:34px;">
+          <div class="chip green"><div class="v">0 B</div><div class="l">PII leaves device</div></div>
+          <div class="chip"><div class="v">8</div><div class="l">Redaction layers</div></div>
+          <div class="chip"><div class="v">4</div><div class="l">On-device ML models</div></div>
+          <div class="chip"><div class="v">100%</div><div class="l">PII detection precision</div></div>
+          <div class="chip"><div class="v">2</div><div class="l">Browsers (Chrome + Firefox)</div></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text-dim);" class="animate-fade-up">
+          <div><b style="color:var(--text-bright);">Team Hexacore</b> &nbsp;|&nbsp; Smart India Hackathon 2026</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;">veil-agent.online &middot; github.com/satyasheel2406/Veil</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 2: IDEA TITLE ===== -->
+    <div class="slide" id="s2">
+      <div class="tmpl-header">
+        <div class="tmpl-title"><span class="gradient-text">Idea Title</span></div>
+        <div class="tmpl-team">@SIH Idea submission &middot; <b>Team Hexacore</b></div>
+      </div>
+
+      <div class="section-label">Proposed Solution</div>
+      <p class="slide-subtitle" style="margin-bottom:8px;">An AI browser agent with an unbreakable privacy firewall. The cloud LLM reasons over fully redacted data and plans actions using placeholder references that only the browser can resolve to real values.</p>
+      <ul class="ulist animate-stagger">
+        <li><span class="marker">&#10003;</span><span><strong>On-device perception pipeline</strong> — DOM scanning, regex redaction, NER name masking, face blur, OCR masking run entirely in the browser before any data is sent.</span></li>
+        <li><span class="marker">&#10003;</span><span><strong>Placeholder Ref architecture</strong> — the server plans with tokens like <strong>[EMAIL_1]</strong>, <strong>[PERSON_1]</strong>; real values exist only in a page-local map and never reach the network.</span></li>
+        <li><span class="marker">&#10003;</span><span><strong>8-layer defense</strong> — Regex → NER → ViT → Face Detection → OCR → DOM Blackout → Injection Guard → Server Guard.</span></li>
+      </ul>
+
+      <div class="section-label">How It Addresses the Problem</div>
+      <ul class="ulist">
+        <li><span class="marker">&#10003;</span><span>Ends the all-or-nothing trade-off: users get <strong>full AI capability without exposing</strong> passwords, bank balances, or medical records to a cloud server.</span></li>
+        <li><span class="marker">&#10003;</span><span>Proven on end-to-end demos: banking transfer and 15-field healthcare intake completed with <strong>0 bytes of PII leaving the device</strong>.</span></li>
+      </ul>
+
+      <div class="section-label">Innovation &amp; Uniqueness</div>
+      <ul class="ulist">
+        <li><span class="marker">&#9733;</span><span><strong>Novel Placeholder Ref System</strong> — no prior work lets a cloud LLM plan with anonymized placeholders resolved only client-side.</span></li>
+        <li><span class="marker">&#9733;</span><span><strong>Vision-first redaction</strong> — face detection on the raw frame catches what DOM parsing cannot see.</span></li>
+        <li><span class="marker">&#9733;</span><span><strong>4 self-hosted ML models</strong> (ViT, BlazeFace, Tesseract, DistilBERT) running fully in-browser, offline-capable.</span></li>
+      </ul>
+    </div>
+
+    <!-- ===== SLIDE 3: TECHNICAL APPROACH ===== -->
+    <div class="slide" id="s3">
+      <div class="tmpl-header">
+        <div class="tmpl-title"><span class="gradient-text">Technical Approach</span></div>
+        <div class="tmpl-team">@SIH Idea submission &middot; <b>Team Hexacore</b></div>
+      </div>
+
+      <div class="cards c2 animate-stagger" style="margin-top:6px;">
+        <div class="card">
+          <h4><span class="icon">&#128187;</span> Client — Browser Extension</h4>
+          <p>TypeScript + <strong>WXT</strong> (single codebase → Chrome MV3 + Firefox MV2) + React + ONNX Runtime Web. DOM extraction, redaction, OCR, and action execution all on-device.</p>
+          <div class="mini"><strong>Models (in-browser):</strong> ViT vision (ONNX/WASM) · BlazeFace (MediaPipe) · Tesseract.js OCR · DistilBERT NER</div>
+        </div>
+        <div class="card">
+          <h4><span class="icon">&#128421;</span> Server — FastAPI + Render</h4>
+          <p>Python FastAPI with WebSocket gateway, rate limiter, and origin validation. Receives <strong>only anonymized</strong> payloads; returns action plans with placeholder refs.</p>
+          <div class="mini"><strong>LLM:</strong> OpenRouter — Nemotron 120B (free tier), 4-strategy JSON extraction fallback, graceful prose → fail handling.</div>
+        </div>
+      </div>
+
+      <div class="section-label">Implementation Flow</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:6px;" class="animate-stagger">
+        <span class="card" style="padding:8px 14px;font-size:11px;border-color:var(--primary);color:var(--text-bright);">User Task</span>
+        <span style="color:var(--text-dim);">&#8594;</span>
+        <span class="card" style="padding:8px 14px;font-size:11px;">DOM Extract</span>
+        <span style="color:var(--text-dim);">&#8594;</span>
+        <span class="card" style="padding:8px 14px;font-size:11px;">Regex + NER Redact</span>
+        <span style="color:var(--text-dim);">&#8594;</span>
+        <span class="card" style="padding:8px 14px;font-size:11px;">Face Blur + Blackout</span>
+        <span style="color:var(--text-dim);">&#8594;</span>
+        <span class="card" style="padding:8px 14px;font-size:11px;">Injection Guard</span>
+        <span style="color:var(--text-dim);">&#8594;</span>
+        <span class="card" style="padding:8px 14px;font-size:11px;border-color:var(--green);color:var(--green);">LLM Plans [REFs]</span>
+        <span style="color:var(--text-dim);">&#8594;</span>
+        <span class="card" style="padding:8px 14px;font-size:11px;">Client Executes</span>
+      </div>
+
+      <div class="section-label">Evaluation Results (prototype working)</div>
+      <div class="metric-row animate-stagger">
+        <div class="chip green"><div class="v">100%</div><div class="l">PII detection precision</div></div>
+        <div class="chip green"><div class="v">100%</div><div class="l">PII detection recall</div></div>
+        <div class="chip green"><div class="v">1.000</div><div class="l">Redaction IoU match</div></div>
+        <div class="chip amber"><div class="v">~17s</div><div class="l">End-to-end latency</div></div>
+        <div class="chip"><div class="v">15/15</div><div class="l">Server tests passing</div></div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 4: FEASIBILITY AND VIABILITY ===== -->
+    <div class="slide" id="s4">
+      <div class="tmpl-header">
+        <div class="tmpl-title"><span class="gradient-text">Feasibility &amp; Viability</span></div>
+        <div class="tmpl-team">@SIH Idea submission &middot; <b>Team Hexacore</b></div>
+      </div>
+
+      <div class="section-label">Feasibility Analysis</div>
+      <ul class="ulist">
+        <li><span class="marker">&#10003;</span><span><strong>Zero-infrastructure</strong> — all ML runs in the browser via WASM; no GPU servers needed. Deployed on free Render hosting + free extension stores (Firefox AMO, Edge Add-ons).</span></li>
+        <li><span class="marker">&#10003;</span><span><strong>Working prototype</strong> — live end-to-end demos on banking + healthcare forms, server deployed at veil-agent.online, 15/15 automated tests passing.</span></li>
+        <li><span class="marker">&#10003;</span><span><strong>Offline-capable</strong> — self-hosted ViT model cached after first load; works without external model downloads.</span></li>
+      </ul>
+
+      <div class="section-label">Challenges &amp; Risks</div>
+      <ul class="ulist">
+        <li><span class="marker">&#9888;</span><span><strong>Large ML models (88MB ViT)</strong> — mitigated with ONNX quantization + self-hosting + browser caching after first load.</span></li>
+        <li><span class="marker">&#9888;</span><span><strong>Free LLM JSON reliability</strong> — mitigated with 4-strategy JSON extraction fallback and graceful prose → fail handling.</span></li>
+        <li><span class="marker">&#9888;</span><span><strong>Chrome MV3 offscreen limitation</strong> — solved with a hidden offscreen document running MediaPipe/Tesseract under watchdog timeouts.</span></li>
+        <li><span class="marker">&#9888;</span><span><strong>Prompt injection attacks</strong> — 9-pattern scrubbing + zero-width char stripping, mirrored client-side and server-side.</span></li>
+        <li><span class="marker">&#9888;</span><span><strong>Free tier cold starts</strong> — Render spins down after idle; mitigated with UptimeRobot monitoring pinging /health every 5 min.</span></li>
+      </ul>
+
+      <div class="section-label">Risks vs. Mitigations</div>
+      <div class="cards c2 animate-stagger">
+        <div class="card"><h4><span class="icon">&#128737;</span> Deployment at scale</h4><p>Stateless, horizontally scalable FastAPI + WebSocket gateway; auth-token opt-in and rate limiting built in.</p></div>
+        <div class="card"><h4><span class="icon">&#128200;</span> Measurable outcome</h4><p>Precision, recall, and IoU scored against labeled corpora in vitest — a repeatable, quantified CI pipeline.</p></div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 5: IMPACT AND BENEFITS ===== -->
+    <div class="slide" id="s5">
+      <div class="tmpl-header">
+        <div class="tmpl-title"><span class="gradient-text">Impact &amp; Benefits</span></div>
+        <div class="tmpl-team">@SIH Idea submission &middot; <b>Team Hexacore</b></div>
+      </div>
+
+      <p class="slide-subtitle" style="margin-top:6px;">Target audience: privacy-conscious consumers, healthcare staff filling patient forms, banking users automating transfers, and anyone wanting AI assistance without a privacy trade-off.</p>
+
+      <div class="cards c3 animate-stagger" style="margin-top:14px;">
+        <div class="card" style="border-top:2px solid var(--primary);">
+          <h4><span class="icon">&#128101;</span> Social Impact</h4>
+          <p>Protects users' most sensitive data — medical records, financial accounts, private messages — while enabling AI assistance. Makes AI agents accessible to privacy-conscious and vulnerable users.</p>
+        </div>
+        <div class="card" style="border-top:2px solid var(--green);">
+          <h4><span class="icon">&#128176;</span> Economic Impact</h4>
+          <p>$0 hosting cost (free Render tier + free extension stores). No premium API spend — runs on free LLM tiers. Reduces organizational liability and cost of data-breach incidents.</p>
+        </div>
+        <div class="card" style="border-top:2px solid var(--amber);">
+          <h4><span class="icon">&#127807;</span> Environmental Impact</h4>
+          <p>On-device processing reduces cloud compute and data-center storage of user screenshots. Energy-efficient — ML models load lazily only when a feature is used.</p>
+        </div>
+      </div>
+
+      <div class="section-label">Demonstrated Benefit</div>
+      <div class="card" style="display:flex;align-items:center;gap:14px;border-color:var(--green);">
+        <span style="font-size:30px;">&#128274;</span>
+        <div>
+          <p style="font-size:13px;font-weight:700;color:var(--green);margin-bottom:3px;">Zero PII Leakage — proven in live demos</p>
+          <p style="font-size:11.5px;color:var(--text-dim);">Banking transfer and healthcare intake completed end-to-end. Real values (email, phone, Aadhaar, name) existed ONLY in a page-local PlaceholderMap — the cloud server received only [REF] placeholders and a sanitized screenshot.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 6: RESEARCH AND REFERENCES ===== -->
+    <div class="slide" id="s6">
+      <div class="tmpl-header">
+        <div class="tmpl-title"><span class="gradient-text">Research &amp; References</span></div>
+        <div class="tmpl-team">@SIH Idea submission &middot; <b>Team Hexacore</b></div>
+      </div>
+
+      <div class="section-label">Core Model Research</div>
+      <ul class="ulist animate-stagger">
+        <li><span class="marker">&#128218;</span><span><strong>ViT</strong> — A. Dosovitskiy et al., "An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale," ICLR 2021 (self-hosted ONNX).</span></li>
+        <li><span class="marker">&#128218;</span><span><strong>BlazeFace</strong> — V. Bazarevsky et al., "BlazeFace: Sub-millisecond Neural Face Detection on Mobile GPUs" (Google, 2019).</span></li>
+        <li><span class="marker">&#128218;</span><span><strong>DistilBERT NER</strong> — V. Sanh et al., "DistilBERT, a distilled version of BERT," 2019.</span></li>
+        <li><span class="marker">&#128218;</span><span><strong>Tesseract OCR</strong> — open-source OCR engine (WASM via tesseract.js).</span></li>
+        <li><span class="marker">&#128218;</span><span><strong>ONNX Runtime Web</strong> — Microsoft; runs ML models in the browser via WebAssembly.</span></li>
+      </ul>
+
+      <div class="section-label">Novel Contribution</div>
+      <ul class="ulist">
+        <li><span class="marker">&#9733;</span><span><strong>Placeholder Ref System</strong> — client-side PII tokenization for AI agents. To the best of our knowledge, no prior public work lets a cloud LLM plan actions over anonymized placeholder references resolved only on-device.</span></li>
+      </ul>
+
+      <div class="section-label">Links</div>
+      <div class="cards c2 animate-stagger">
+        <div class="card"><h4><span class="icon">&#127760;</span> Live Demo</h4><p style="font-family:'JetBrains Mono',monospace;font-size:12px;">veil-agent.online</p></div>
+        <div class="card"><h4><span class="icon">&#128187;</span> Source Code</h4><p style="font-family:'JetBrains Mono',monospace;font-size:12px;">github.com/satyasheel2406/Veil</p></div>
+        <div class="card"><h4><span class="icon">&#128218;</span> Technical Deep Dive</h4><p style="font-family:'JetBrains Mono',monospace;font-size:12px;">veil-agent.online/demo/technical-deep-dive.html</p></div>
+        <div class="card"><h4><span class="icon">&#127973;</span> Healthcare Demo Pages</h4><p style="font-family:'JetBrains Mono',monospace;font-size:12px;">veil-agent.online/demo/medical-dashboard.html</p></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="nav-controls">
+    <button class="nav-btn" onclick="prevSlide()">&#8592;</button>
+    <span class="slide-counter"><span id="current">1</span> / <span id="total">6</span></span>
+    <button class="nav-btn" onclick="nextSlide()">&#8594;</button>
+  </div>
+
+  <script>
+    let current = 1;
+    const total = document.querySelectorAll('.slide').length;
+    document.getElementById('total').textContent = total;
+
+    function showSlide(n) {
+      if (n < 1) n = 1;
+      if (n > total) n = total;
+      current = n;
+      document.querySelectorAll('.slide').forEach((s, i) => {
+        s.classList.toggle('active', i === n - 1);
+      });
+      document.getElementById('current').textContent = n;
+      document.getElementById('progressBar').style.width = (n / total * 100) + '%';
+    }
+
+    function nextSlide() { showSlide(current + 1); }
+    function prevSlide() { showSlide(current - 1); }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); nextSlide(); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); prevSlide(); }
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.nav-controls')) nextSlide();
+    });
+
+    showSlide(1);
+  </script>
+</body>
+</html>
